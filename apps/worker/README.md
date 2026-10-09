@@ -7,7 +7,7 @@ An independent Node/Playwright service for the OpenMuse server. There is no Open
 Set the same random `WORKER_TOKEN` (at least 32 characters) in the server and the shell running Compose, then start from the repository root:
 
 ```sh
-docker compose -f infra/compose.yaml up --build -d
+docker compose -f infra/compose.browser.yaml up --build -d
 ```
 
 Set the server's worker URL to `http://127.0.0.1:8790`. The host port binds only to loopback. If the server is later containerized on the same Compose network, use `http://browser-worker:8790`. Never send the worker token to a browser or mobile client.

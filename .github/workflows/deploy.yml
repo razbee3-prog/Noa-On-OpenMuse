@@ -1,0 +1,35 @@
+name: Deploy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: deploy-droplet
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DROPLET_KNOWN_HOSTS: ${{ secrets.DROPLET_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DROPLET_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Sync source to droplet
+        env:
+          DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+        run: >-
+          rsync -az --delete --exclude .git --exclude node_modules
+          ./ "root@${DROPLET_HOST}:/opt/noa/app/"
+      - name: Build and restart
+        env:
+          DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+        run: ssh "root@${DROPLET_HOST}" /opt/noa/app/infra/deploy.sh

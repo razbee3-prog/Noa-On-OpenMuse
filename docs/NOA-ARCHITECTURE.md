@@ -14,7 +14,7 @@ Paths are relative to the repository root.
 | Linux computer | [apps/computer/Dockerfile](../apps/computer/Dockerfile) | Image the API starts on demand, one container per owner, through the Docker CLI ([apps/server/src/computer-backend.ts](../apps/server/src/computer-backend.ts#L220-L240)). |
 | Web / mobile client | [apps/mobile/App.tsx](../apps/mobile/App.tsx#L69-L98) | Expo app (iOS, Android, web). It talks to the API at `EXPO_PUBLIC_API_URL` ([apps/mobile/src/api.ts](../apps/mobile/src/api.ts#L4-L7)). |
 
-Deployment references in the repo: [render.yaml](../render.yaml) (API, static web, private browser worker) and [infra/compose.yaml](../infra/compose.yaml), which **only defines the browser worker**. There are no Dockerfiles for the API or the web export yet. Ticket 1 has to add them, plus Postgres and Caddy.
+Deployment references in the repo: [render.yaml](../render.yaml) (API, static web, private browser worker) and [infra/compose.yaml](../infra/compose.yaml), the single-droplet stack (Caddy + web export, API, Postgres, browser worker, Docker socket proxy, computer image; see [docs/DEPLOY.md](DEPLOY.md)). [infra/compose.browser.yaml](../infra/compose.browser.yaml) runs only the browser worker for local development.
 
 ## 2. The agent loop
 
@@ -137,7 +137,7 @@ The owner column, owner-scoped queries, owner-bound signed URLs, per-owner compu
 
 ## 9. Notes for Ticket 1 (deploy)
 
-- [infra/compose.yaml](../infra/compose.yaml) has only `browser-worker`. API, web, Postgres, Caddy and the computer image have to be added.
+- Done in Ticket 1: [infra/compose.yaml](../infra/compose.yaml) runs API, web (Caddy), Postgres, browser worker and the computer image; [docs/DEPLOY.md](DEPLOY.md) has the runbook.
 - The web client bakes `EXPO_PUBLIC_API_URL` in at build time ([apps/mobile/src/api.ts L4-L7](../apps/mobile/src/api.ts#L4-L7), [render.yaml](../render.yaml)).
 - The API needs `HOST=0.0.0.0` in live mode, `TRUST_PROXY=true` behind Caddy, and Docker socket access for `COMPUTER_ENABLED=true` ([config.ts L139-L171](../apps/server/src/config.ts#L139-L171), [docs/COMPUTER.md](COMPUTER.md)).
 - The app display name is `expo.name` / `web.name` in [apps/mobile/app.json](../apps/mobile/app.json) plus the strings in item 6.
