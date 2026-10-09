@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { link, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join, resolve, sep } from "node:path";
+import { dirname, resolve, sep } from "node:path";
 import type { Artifact } from "../../../packages/domain/src/index.ts";
 import { fillPdf, inspectPdf } from "../../../packages/integrations/src/pdf.ts";
 import type { Auth } from "./auth.ts";
@@ -8,6 +8,8 @@ import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
 
+const ownerDirectory = (owner: string) =>
+  createHash("sha256").update(`files:${owner}`).digest("hex").slice(0, 32);
 const FILE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function sanitizeFileName(name: string): string {
@@ -61,9 +63,8 @@ export class Files {
     if (bytes.length > 10 * 1024 * 1024) throw new AppError("PDFs must be 10 MB or smaller", 413);
     let metadata = await inspectPdf(bytes);
     if (metadata.pageCount > 500) throw new AppError("PDFs must have 500 pages or fewer", 422);
-    const directory = join(this.config.dataDir, "files");
-    await mkdir(directory, { recursive: true, mode: 0o700 });
-    const path = this.pathFor(id);
+    const path = this.pathFor(owner, id);
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
     if (operationKey === undefined) {
       await writeFile(path, bytes, { mode: 0o600, flag: "wx" });
     } else {
@@ -113,16 +114,24 @@ export class Files {
     if (!file) throw new AppError("File not found", 404);
     return file;
   }
-  private pathFor(id: string): string {
+  /** Each owner's PDFs live in their own directory, named by a hash of the owner ID. */
+  private pathFor(owner: string, id: string, legacy = false): string {
     assertFileId(id);
-    const directory = resolve(this.config.dataDir, "files");
+    const root = resolve(this.config.dataDir, "files");
+    const directory = legacy ? root : resolve(root, ownerDirectory(owner));
     const resolved = resolve(directory, `${id}.pdf`);
     if (!resolved.startsWith(`${directory}${sep}`)) throw new AppError("File not found", 404);
     return resolved;
   }
   async bytes(owner: string, id: string) {
     await this.get(owner, id);
-    return readFile(this.pathFor(id));
+    try {
+      return await readFile(this.pathFor(owner, id));
+    } catch (error) {
+      // PDFs stored before per-owner directories stay readable by their (database-checked) owner.
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      return readFile(this.pathFor(owner, id, true));
+    }
   }
   async fill(
     owner: string,

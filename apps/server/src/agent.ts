@@ -6,6 +6,7 @@ import {
   CopilotRuntime,
   createCopilotHonoHandler,
 } from "@copilotkit/runtime/v2";
+import type { Accounts } from "./accounts.ts";
 import type { Auth } from "./auth.ts";
 import type { Config } from "./config.ts";
 import { ConversationAgent } from "./engine/conversation.ts";
@@ -29,6 +30,7 @@ export function makeRuntime(
   config: Config,
   service: AgentService,
   auth: Auth,
+  accounts: Accounts,
   intelligence: CopilotKitIntelligence,
 ) {
   // Built on first use, then shared so live mode reuses one TypeSafe client across requests.
@@ -60,10 +62,10 @@ export function makeRuntime(
     intelligence,
     // The shared CopilotKit sink carries this tag onto existing PostHog events.
     telemetryProperties: { accessibility_title: "OpenMuse" },
-    identifyUser: async (request) => ({
-      id: await auth.owner(request.headers.get("authorization") ?? undefined),
-      name: "OpenMuse user",
-    }),
+    identifyUser: async (request) => {
+      const id = await auth.owner(request.headers.get("authorization") ?? undefined);
+      return { id, name: await accounts.displayName(id) };
+    },
     generateThreadNames: false,
   });
   return createCopilotHonoHandler({ runtime, basePath: "/api/copilotkit" });

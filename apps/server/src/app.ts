@@ -11,6 +11,7 @@ import {
   emailDraftSchema,
   proposalSchema,
 } from "../../../packages/domain/src/index.ts";
+import { Accounts, ADMIN_OWNER, type AppleVerifier } from "./accounts.ts";
 import { ActionService } from "./actions.ts";
 import { agentConfigured, makeRuntime } from "./agent.ts";
 import { createAuth } from "./auth.ts";
@@ -30,10 +31,11 @@ import { WorkspaceService } from "./workspace.ts";
 export async function createApp(
   db: Store,
   config: Config,
-  options: { docker?: DockerRunner } = {},
+  options: { docker?: DockerRunner; appleVerifier?: AppleVerifier } = {},
 ) {
   assertApiDeploymentConfig(config);
   const auth = await createAuth(db, config),
+    accounts = new Accounts(db, config, options.appleVerifier),
     files = new Files(db, config, auth),
     google = new GoogleAuth(db, config),
     workspace = new WorkspaceService(db, config, files, google);
@@ -48,8 +50,8 @@ export async function createApp(
   const computer = new ComputerService(db, config, options.docker);
   const agent = new AgentService(db, config, workspace, files, actions, browser, computer);
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
-  const runtime = makeRuntime(config, agent, auth, intelligence);
-  const app = new Hono<{ Variables: { owner: string } }>();
+  const runtime = makeRuntime(config, agent, auth, accounts, intelligence);
+  const app = new Hono<{ Variables: { owner: string; role: "admin" | "member" } }>();
   const origins = new Set([...config.allowedOrigins, new URL(config.publicUrl).origin]);
   app.use("*", async (c, next) => {
     const origin = c.req.header("origin");
@@ -103,21 +105,30 @@ export async function createApp(
       browserConfigured: Boolean(config.workerUrl && config.workerToken),
     }),
   );
-  let loginWindow = 0,
-    loginAttempts = 0;
+  // Per-client throttle for every sign-in route, so one caller cannot lock others out.
+  const signInLimit = rateLimit(Boolean(config.trustProxy), { windowMs: 60_000, maxRequests: 10 });
+  app.use("/api/session", signInLimit);
+  app.use("/api/session/*", signInLimit);
   app.post("/api/session", async (c) => {
-    if (Date.now() - loginWindow > 60000) {
-      loginWindow = Date.now();
-      loginAttempts = 0;
-    }
-    if (++loginAttempts > 30)
-      throw new AppError("Too many sign-in attempts. Try again in a minute.", 429);
     const body = z.object({ accessKey: z.string().optional() }).parse(await c.req.json());
     const session = await auth.session(body.accessKey);
-    await workspace.ensureSample("local-user", actions);
-    await agent.ensure("local-user");
-    if (config.mode === "sample") await agent.refreshIdeas("local-user");
+    await accounts.ensureAdmin();
+    await workspace.ensureSample(ADMIN_OWNER, actions);
+    await agent.ensure(ADMIN_OWNER);
+    if (config.mode === "sample") await agent.refreshIdeas(ADMIN_OWNER);
     return c.json(session);
+  });
+  app.post("/api/session/apple", async (c) => {
+    const body = z
+      .object({
+        identityToken: z.string().min(20).max(8192),
+        inviteCode: z.string().trim().max(64).optional(),
+        fullName: z.string().trim().max(160).optional(),
+      })
+      .parse(await c.req.json());
+    const account = await accounts.signInWithApple(body);
+    await agent.ensure(account.id);
+    return c.json({ ...(await auth.issue(account.id, "member")), mode: config.mode });
   });
   app.get("/api/google/callback", async (c) => {
     if (c.req.query("error"))
@@ -135,18 +146,56 @@ export async function createApp(
       /^\/api\/files\/[^/]+\/content$|^\/api\/browsers\/[^/]+\/(?:preview|console)$/.test(
         c.req.path,
       );
-    const owner =
+    const { owner, role } =
       signedRoute && c.req.query("signature")
-        ? auth.verify(new URL(c.req.url))
-        : await auth.owner(c.req.header("authorization"));
+        ? { owner: auth.verify(new URL(c.req.url)), role: "member" as const }
+        : await auth.context(c.req.header("authorization"));
     c.set("owner", owner);
+    c.set("role", role);
     await next();
+  });
+  app.delete("/api/session", async (c) => {
+    await auth.revoke(c.req.header("authorization"));
+    return c.json({ ok: true });
+  });
+  const accountView = async (owner: string, role: "admin" | "member") => {
+    const account =
+      (await accounts.get(owner)) ?? (owner === ADMIN_OWNER ? await accounts.ensureAdmin() : null);
+    if (!account) throw new AppError("Account not found", 404);
+    return {
+      displayName: account.displayName,
+      email: account.email ?? null,
+      provider: account.provider,
+      role,
+    };
+  };
+  app.get("/api/account", async (c) => c.json(await accountView(c.get("owner"), c.get("role"))));
+  app.put("/api/account", async (c) => {
+    const body = z
+      .object({ displayName: z.string().trim().min(1).max(80) })
+      .parse(await c.req.json());
+    await accountView(c.get("owner"), c.get("role"));
+    await accounts.rename(c.get("owner"), body.displayName);
+    return c.json(await accountView(c.get("owner"), c.get("role")));
+  });
+  const requireAdmin = (role: string) => {
+    if (role !== "admin") throw new AppError("Only the workspace admin can manage invites", 403);
+  };
+  app.get("/api/invites", async (c) => {
+    requireAdmin(c.get("role"));
+    return c.json(await accounts.listInvites());
+  });
+  app.post("/api/invites", async (c) => {
+    requireAdmin(c.get("role"));
+    return c.json(await accounts.createInvite(c.get("owner")), 201);
   });
   app.get("/api/workspace", async (c) => {
     const [snapshot, reachable] = await Promise.all([
       workspace.snapshot(c.get("owner"), c.req.query("q")),
       browser.reachable(),
     ]);
+    if (config.mode === "live")
+      snapshot.profile = { ...snapshot.profile, name: await accounts.displayName(c.get("owner")) };
     snapshot.browsers = snapshot.browsers.map((s) => browser.decorate(c.get("owner"), s));
     // A configured worker that does not answer is offline, not ready.
     snapshot.connections = snapshot.connections.map((connection) =>
@@ -350,5 +399,5 @@ export async function createApp(
   app.get("/", (c) =>
     c.json({ name: "Noa on OpenMuse", app: "http://localhost:8081", health: "/api/health" }),
   );
-  return { app, auth, files, actions, workspace, agent, computer };
+  return { app, auth, accounts, files, actions, workspace, agent, computer };
 }

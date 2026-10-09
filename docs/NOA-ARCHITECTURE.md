@@ -114,6 +114,8 @@ The underlying `@copilotkit/runtime@1.70.1` does have an "SSE mode" when `intell
 
 ## 8. Every place that assumes a single user
 
+> Ticket 2 status: sessions now carry the verified Apple owner (or the admin `local-user` for access-key sign-in), sign-in is throttled per IP, the task worker round-robins owners with at most 2 tasks each, browser sessions are capped per owner, PDFs are stored per owner, and the display name comes from the account. See [accounts.ts](../apps/server/src/accounts.ts) and [tests/accounts.test.ts](../tests/accounts.test.ts).
+
 | # | Assumption | Where |
 | --- | --- | --- |
 | 1 | Every session is created for the hard-coded owner `"local-user"`. | [auth.ts L23-L28](../apps/server/src/auth.ts#L23-L28) |
