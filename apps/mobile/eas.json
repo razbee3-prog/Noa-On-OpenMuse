@@ -5,6 +5,8 @@
   },
   "build": {
     "production": {
+      "node": "22.20.0",
+      "pnpm": "11.19.0",
       "autoIncrement": true,
       "environment": "production",
       "ios": {
