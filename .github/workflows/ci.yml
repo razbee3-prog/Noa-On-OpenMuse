@@ -84,6 +84,17 @@ jobs:
           node-version: 24
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - run: pnpm install --frozen-lockfile
+      # Docker Hub's token endpoint intermittently times out from hosted runners; pre-pull the
+      # base image with retries and a public mirror so the build resolves it locally.
+      - name: Pull the computer base image
+        run: |
+          image="$(sed -n 's/^FROM //p' apps/computer/Dockerfile | head -1)"
+          for attempt in 1 2 3; do
+            docker pull "$image" && exit 0
+            docker pull "mirror.gcr.io/library/$image" && docker tag "mirror.gcr.io/library/$image" "$image" && exit 0
+            sleep $((attempt * 10))
+          done
+          exit 1
       - name: Build the isolated Linux computer
         run: docker build -t openmuse-computer:local apps/computer
       - name: Verify computer isolation, persistence and cancellation
