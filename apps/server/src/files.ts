@@ -47,6 +47,12 @@ export class Files {
     private readonly config: Config,
     private readonly auth: Auth,
   ) {}
+  async removeOwner(owner: string) {
+    await rm(resolve(this.config.dataDir, "files", ownerDirectory(owner)), {
+      recursive: true,
+      force: true,
+    });
+  }
   async import(
     owner: string,
     name: string,

@@ -21,6 +21,8 @@ export interface ComputerBackend {
   state(owner: string): Promise<ComputerState>;
   start(owner: string): Promise<void>;
   stop(owner: string): Promise<void>;
+  /** Removes the owner's computer and its persistent workspace. */
+  destroy?(owner: string): Promise<void>;
   running(owner: string): Promise<ComputerSession>;
 }
 const controlTimeout = 10000;
@@ -273,6 +275,22 @@ export class DockerComputer implements ComputerBackend {
         "2",
         computerIdentity(this.config, owner).container,
       ]);
+  }
+  async destroy(owner: string) {
+    const identity = computerIdentity(this.config, owner);
+    if (await this.inspect(owner))
+      await this.checked(["container", "rm", "--force", identity.container]);
+    const volume = (
+      await this.checked([
+        "volume",
+        "ls",
+        "--filter",
+        `name=^${identity.volume}$`,
+        "--format",
+        "{{.Name}}",
+      ])
+    ).trim();
+    if (volume) await this.checked(["volume", "rm", identity.volume]);
   }
   async running(owner: string): Promise<ComputerSession> {
     if ((await this.state(owner)) !== "running") throw stopped();

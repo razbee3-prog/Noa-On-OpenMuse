@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Share, Text, View } from "react-native";
+import { Alert, Linking, Platform, Share, Text, View } from "react-native";
+import { API_URL } from "./api";
 import { signOutLocally } from "./session-store";
 import { Button, Card, ErrorNotice, Field, s } from "./ui";
 import { useWorkspace } from "./workspace";
@@ -11,7 +12,7 @@ interface AccountInfo {
   role: "admin" | "member";
 }
 
-/** Display name, sign out, and (for the admin) one-time invite codes. */
+/** Display name, privacy policy, sign out, account deletion and (for the admin) one-time invite codes. */
 export function AccountCard() {
   const { api, refresh, notify } = useWorkspace();
   const [account, setAccount] = useState<AccountInfo>();
@@ -95,6 +96,32 @@ export function AccountCard() {
       >
         Sign out
       </Button>
+      <Button small onPress={() => void Linking.openURL(`${API_URL}/privacy.html`)}>
+        Privacy policy
+      </Button>
+      {account?.provider === "apple" && (
+        <Button
+          danger
+          onPress={() => {
+            const remove = () =>
+              void run(async () => {
+                await api.request("/api/account", undefined, "DELETE");
+                await signOutLocally();
+              });
+            const message =
+              "This permanently deletes your account, chats, tasks, memories, files, computer workspace and connected accounts. It can't be undone.";
+            if (Platform.OS === "web") {
+              if (globalThis.confirm?.(message)) remove();
+            } else
+              Alert.alert("Delete your account?", message, [
+                { text: "Cancel", style: "cancel" },
+                { text: "Delete account", style: "destructive", onPress: remove },
+              ]);
+          }}
+        >
+          Delete account
+        </Button>
+      )}
     </Card>
   );
 }

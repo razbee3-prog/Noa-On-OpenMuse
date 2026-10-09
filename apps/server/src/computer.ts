@@ -345,6 +345,13 @@ export class ComputerService {
     await this.exclusive(owner, () => this.backend.start(owner));
     return this.snapshot(owner);
   }
+  async destroy(owner: string) {
+    if (!this.config.computerEnabled) return;
+    await this.exclusive(owner, async () => {
+      if (this.backend.destroy) await this.backend.destroy(owner);
+      else await this.backend.stop(owner);
+    });
+  }
   async stop(owner: string) {
     this.enabled();
     let lease = await this.db.get<Lease>(owner, "computer-state", "lease");
