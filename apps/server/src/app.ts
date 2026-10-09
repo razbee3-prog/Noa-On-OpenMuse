@@ -11,6 +11,7 @@ import {
   emailDraftSchema,
   proposalSchema,
 } from "../../../packages/domain/src/index.ts";
+import type { PlaidClient } from "../../../packages/integrations/src/plaid.ts";
 import { Accounts, ADMIN_OWNER, type AppleVerifier } from "./accounts.ts";
 import { ActionService } from "./actions.ts";
 import { agentConfigured, makeRuntime } from "./agent.ts";
@@ -25,13 +26,14 @@ import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
+import { PlaidService } from "./plaid.ts";
 import { rateLimit } from "./rate-limit.ts";
 import { WorkspaceService } from "./workspace.ts";
 
 export async function createApp(
   db: Store,
   config: Config,
-  options: { docker?: DockerRunner; appleVerifier?: AppleVerifier } = {},
+  options: { docker?: DockerRunner; appleVerifier?: AppleVerifier; plaidClient?: PlaidClient } = {},
 ) {
   assertApiDeploymentConfig(config);
   const auth = await createAuth(db, config),
@@ -48,7 +50,8 @@ export async function createApp(
   });
   const browser = new BrowserService(db, config, auth, files);
   const computer = new ComputerService(db, config, options.docker);
-  const agent = new AgentService(db, config, workspace, files, actions, browser, computer);
+  const plaid = new PlaidService(db, config, options.plaidClient);
+  const agent = new AgentService(db, config, workspace, files, actions, browser, computer, plaid);
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
   const runtime = makeRuntime(config, agent, auth, accounts, intelligence);
   const app = new Hono<{ Variables: { owner: string; role: "admin" | "member" } }>();
@@ -178,6 +181,10 @@ export async function createApp(
     await accounts.rename(c.get("owner"), body.displayName);
     return c.json(await accountView(c.get("owner"), c.get("role")));
   });
+  app.post("/api/plaid/connect", async (c) => c.json(await plaid.connect(c.get("owner"))));
+  app.post("/api/plaid/complete", async (c) => c.json(await plaid.complete(c.get("owner"))));
+  app.post("/api/plaid/sync", async (c) => c.json(await plaid.sync(c.get("owner"))));
+  app.post("/api/plaid/disconnect", async (c) => c.json(await plaid.disconnect(c.get("owner"))));
   const requireAdmin = (role: string) => {
     if (role !== "admin") throw new AppError("Only the workspace admin can manage invites", 403);
   };
@@ -194,6 +201,10 @@ export async function createApp(
       workspace.snapshot(c.get("owner"), c.req.query("q")),
       browser.reachable(),
     ]);
+    snapshot.connections = [
+      ...snapshot.connections.filter((connection) => connection.id !== "plaid"),
+      await plaid.status(c.get("owner")),
+    ];
     if (config.mode === "live")
       snapshot.profile = { ...snapshot.profile, name: await accounts.displayName(c.get("owner")) };
     snapshot.browsers = snapshot.browsers.map((s) => browser.decorate(c.get("owner"), s));
@@ -399,5 +410,5 @@ export async function createApp(
   app.get("/", (c) =>
     c.json({ name: "Noa on OpenMuse", app: "http://localhost:8081", health: "/api/health" }),
   );
-  return { app, auth, accounts, files, actions, workspace, agent, computer };
+  return { app, auth, accounts, plaid, files, actions, workspace, agent, computer };
 }

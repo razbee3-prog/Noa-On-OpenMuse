@@ -46,6 +46,9 @@ services:
       ALLOWED_ORIGINS: https://${SITE_ADDRESS}
       TRUST_PROXY: "true"
       APPLE_AUDIENCES: ${APPLE_AUDIENCES:-com.razbhimani.noa}
+      PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:-}
+      PLAID_SECRET: ${PLAID_SECRET:-}
+      PLAID_ENV: ${PLAID_ENV:-sandbox}
       TASK_WORKER_ENABLED: "true"
       WEB_SEARCH_ENABLED: "true"
       BROWSER_WORKER_URL: http://browser-worker:8790

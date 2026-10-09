@@ -21,7 +21,7 @@ Per-user computer containers are created by the API through the socket proxy, wi
 
 ## `/opt/noa/.env` keys
 
-`SITE_ADDRESS`, `MODEL`, `ANTHROPIC_API_KEY`, `CPK_INTELLIGENCE_API_KEY`, `CPK_TELEMETRY_ID`, `OPENMUSE_ACCESS_KEY`, `TOKEN_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`, `WORKER_TOKEN`, `COMPUTER_DEPLOYMENT_ID`.
+`SITE_ADDRESS`, `MODEL`, `ANTHROPIC_API_KEY`, `CPK_INTELLIGENCE_API_KEY`, `CPK_TELEMETRY_ID`, `OPENMUSE_ACCESS_KEY`, `TOKEN_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`, `WORKER_TOKEN`, `COMPUTER_DEPLOYMENT_ID`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` (`sandbox` or `production`).
 
 The same values are stored as GitHub repository secrets, as a backup.
 
@@ -31,6 +31,12 @@ The same values are stored as GitHub repository secrets, as a backup.
 - New accounts need a one-time invite code. Sign in to the web app with `OPENMUSE_ACCESS_KEY` (admin), open Apps, and press **Create invite**. Codes work once and expire after 14 days.
 - Sessions last 30 days. The iPhone keeps its session in the Keychain; the web app keeps it until the tab closes.
 - Limits per account: 10 sign-in attempts a minute per IP, 2 running agent tasks, 2 active browser sessions and 4 saved browser profiles. PDFs live under `/data/files/<owner-hash>/`.
+
+## Plaid (read-only)
+
+- Each account links its own bank under Apps > Bank (Plaid), using Plaid Hosted Link. The access token is encrypted with `TOKEN_ENCRYPTION_KEY` and stored per owner.
+- Only Balances and Transactions are used. The client in `packages/integrations/src/plaid.ts` has no transfer or payment endpoints.
+- The droplet runs `PLAID_ENV=sandbox`. To go live, set `PLAID_SECRET` to the production secret and `PLAID_ENV=production` in `/opt/noa/.env`, then run `infra/deploy.sh`.
 
 ## Deploys
 
