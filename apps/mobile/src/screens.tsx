@@ -12,6 +12,7 @@ import {
   FileText,
   Globe2,
   Inbox,
+  Landmark,
   Link2,
   Mail,
   Plus,
@@ -1222,6 +1223,21 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
       setBusy(false);
     }
   }
+  async function plaidAction(path: string, message: string) {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.request<{ url?: string }>(`/api/plaid/${path}`, {});
+      if (result.url) await Linking.openURL(result.url);
+      await refresh();
+      notify(message);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const plaid = w.connections.find((c) => c.id === "plaid");
   const google = w.connections.find((c) => c.id === "google");
   const connected = google?.status === "connected" || google?.status === "sample";
   const rows = [
@@ -1242,6 +1258,18 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
       connected: w.connections.some((c) => c.id === "browser" && c.status === "connected"),
       group: "browser",
     },
+    ...(plaid && plaid.status !== "unconfigured"
+      ? [
+          {
+            id: "plaid",
+            name: "Bank (Plaid)",
+            icon: Landmark,
+            color: "#111111",
+            connected: plaid.status === "connected",
+            group: "plaid",
+          },
+        ]
+      : []),
     {
       id: "openbot",
       name: "OpenBot",
@@ -1322,8 +1350,20 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
       {!rows.length && <Text style={s.muted}>No matching connectors.</Text>}
       {selected && (
         <Sheet
-          title={selected === "google" ? "Google connections" : "OpenBot"}
-          subtitle={selected === "google" ? google?.account : "A computer for your agent"}
+          title={
+            selected === "google"
+              ? "Google connections"
+              : selected === "plaid"
+                ? "Bank (Plaid)"
+                : "OpenBot"
+          }
+          subtitle={
+            selected === "google"
+              ? google?.account
+              : selected === "plaid"
+                ? (plaid?.account ?? "Read-only balances and transactions")
+                : "A computer for your agent"
+          }
           onClose={() => setSelected(undefined)}
         >
           {selected === "google" ? (
@@ -1374,6 +1414,47 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
               >
                 Refresh connections
               </Button>
+            </View>
+          ) : selected === "plaid" ? (
+            <View style={{ gap: 14 }}>
+              <Text style={s.muted}>
+                Link a bank through Plaid to see balances and recent transactions in Finance and let
+                Noa answer questions about them. Access is read-only: Noa can never move money.
+              </Text>
+              <ErrorNotice error={error} />
+              <Button
+                busy={busy}
+                primary
+                icon={Link2}
+                onPress={() =>
+                  void plaidAction(
+                    "connect",
+                    "Finish linking in Plaid, then tap “I've finished linking”.",
+                  )
+                }
+              >
+                {plaid?.status === "connected" ? "Link a different bank" : "Connect bank"}
+              </Button>
+              <Button busy={busy} onPress={() => void plaidAction("complete", "Bank connected.")}>
+                I've finished linking
+              </Button>
+              {plaid?.status === "connected" && (
+                <>
+                  <Button
+                    busy={busy}
+                    onPress={() => void plaidAction("sync", "Bank data refreshed.")}
+                  >
+                    Refresh balances & transactions
+                  </Button>
+                  <Button
+                    busy={busy}
+                    danger
+                    onPress={() => void plaidAction("disconnect", "Bank disconnected.")}
+                  >
+                    Disconnect bank
+                  </Button>
+                </>
+              )}
             </View>
           ) : (
             <View style={{ gap: 14 }}>

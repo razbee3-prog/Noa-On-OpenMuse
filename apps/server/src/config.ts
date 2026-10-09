@@ -37,6 +37,7 @@ export interface Config {
   accessKey?: string;
   /** Apple Sign In audiences (iOS bundle IDs) accepted for identity tokens. */
   appleAudiences?: string[];
+  plaid?: { clientId: string; secret: string; environment: "sandbox" | "production" };
   encryptionKey?: string;
   model?: string;
   jevMode?: "off" | "sample" | "live";
@@ -143,6 +144,14 @@ export function readConfig(): Config {
     dataDir: resolve(process.env.DATA_DIR ?? ".openmuse"),
     databaseUrl: process.env.DATABASE_URL,
     accessKey: process.env.OPENMUSE_ACCESS_KEY,
+    plaid:
+      process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET
+        ? {
+            clientId: process.env.PLAID_CLIENT_ID,
+            secret: process.env.PLAID_SECRET,
+            environment: process.env.PLAID_ENV === "production" ? "production" : "sandbox",
+          }
+        : undefined,
     appleAudiences: (process.env.APPLE_AUDIENCES ?? "")
       .split(",")
       .map((value) => value.trim())
