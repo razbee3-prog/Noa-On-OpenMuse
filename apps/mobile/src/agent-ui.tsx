@@ -1723,7 +1723,7 @@ export function AppsScreen() {
   const { data, mutate } = useAgentWorkspace();
   const [query, setQuery] = useState("");
   const [settings, setSettings] = useState(false);
-  const [name, setName] = useState(data?.identity.name || "OpenMuse");
+  const [name, setName] = useState(data?.identity.name || "Noa on OpenMuse");
   const [tone, setTone] = useState(data?.identity.tone || "warm");
   const [avatar, setAvatar] = useState(data?.identity.avatar || "sky");
   const [showChatUpdates, setShowChatUpdates] = useState(data?.identity.showChatUpdates !== false);

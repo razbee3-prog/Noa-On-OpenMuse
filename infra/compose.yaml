@@ -1,15 +1,96 @@
-name: openmuse
+# Noa on OpenMuse: single-host stack.
+#   docker compose --env-file /opt/noa/.env -f infra/compose.yaml up -d --build
+# Only Caddy publishes ports (80/443). Postgres, the browser worker, the API and
+# the Docker socket proxy are reachable on internal networks only.
+name: noa
+
 services:
-  browser-worker:
+  caddy:
     build:
-      context: ../apps/worker
-    init: true
+      context: ..
+      dockerfile: infra/web.Dockerfile
+      args:
+        EXPO_PUBLIC_API_URL: https://${SITE_ADDRESS:?set SITE_ADDRESS}
     restart: unless-stopped
     environment:
-      WORKER_HOST: 0.0.0.0
-      WORKER_TOKEN: ${WORKER_TOKEN:?Set WORKER_TOKEN to a random secret of at least 32 characters}
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS}
     ports:
-      - "127.0.0.1:8790:8790"
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [edge]
+    depends_on: [api]
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/api.Dockerfile
+    restart: unless-stopped
+    environment:
+      WORKSPACE_MODE: live
+      AGENT_BACKEND: model
+      MODEL: ${MODEL:-anthropic/claude-sonnet-5-5}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY}
+      CPK_INTELLIGENCE_API_KEY: ${CPK_INTELLIGENCE_API_KEY:?set CPK_INTELLIGENCE_API_KEY}
+      CPK_TELEMETRY_ID: ${CPK_TELEMETRY_ID:-}
+      OPENMUSE_ACCESS_KEY: ${OPENMUSE_ACCESS_KEY:?set OPENMUSE_ACCESS_KEY}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?set TOKEN_ENCRYPTION_KEY}
+      DATABASE_URL: postgres://openmuse:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/openmuse
+      HOST: 0.0.0.0
+      PORT: "8787"
+      DATA_DIR: /data
+      PUBLIC_API_URL: https://${SITE_ADDRESS}
+      ALLOWED_ORIGINS: https://${SITE_ADDRESS}
+      TRUST_PROXY: "true"
+      TASK_WORKER_ENABLED: "true"
+      WEB_SEARCH_ENABLED: "true"
+      BROWSER_WORKER_URL: http://browser-worker:8790
+      WORKER_TOKEN: ${WORKER_TOKEN:?set WORKER_TOKEN}
+      COMPUTER_ENABLED: "true"
+      COMPUTER_PROVIDER: docker
+      COMPUTER_IMAGE: openmuse-computer:local
+      COMPUTER_DEPLOYMENT_ID: ${COMPUTER_DEPLOYMENT_ID:-noa}
+      DOCKER_HOST: tcp://docker-proxy:2375
+    volumes:
+      - api-data:/data
+    networks: [edge, db, browser, docker-api]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      browser-worker:
+        condition: service_healthy
+      docker-proxy:
+        condition: service_started
+      computer-image:
+        condition: service_completed_successfully
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: openmuse
+      POSTGRES_DB: openmuse
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [db]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openmuse -d openmuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  browser-worker:
+    build: ../apps/worker
+    restart: unless-stopped
+    environment:
+      WORKER_TOKEN: ${WORKER_TOKEN:?set WORKER_TOKEN}
+      WORKER_HOST: 0.0.0.0
+      WORKER_DATA_DIR: /data
+    init: true
     volumes:
       - browser-profiles:/data
     tmpfs:
@@ -27,5 +108,56 @@ services:
       interval: 15s
       timeout: 5s
       retries: 3
+    networks: [browser]
+
+  # Narrowest Docker access for the Linux computer: containers, volumes, exec,
+  # start/stop. No images, networks, build, system or swarm endpoints.
+  docker-proxy:
+    image: lscr.io/linuxserver/socket-proxy:3.2.3
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      VOLUMES: "1"
+      EXEC: "1"
+      POST: "1"
+      ALLOW_START: "1"
+      ALLOW_STOP: "1"
+      ALLOW_RESTARTS: "0"
+      PING: "1"
+      VERSION: "1"
+      INFO: "0"
+      IMAGES: "0"
+      NETWORKS: "0"
+      BUILD: "0"
+      SYSTEM: "0"
+      LOG_LEVEL: warning
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    tmpfs:
+      - /run
+    networks: [docker-api]
+
+  # Builds the per-user computer image (openmuse-computer:local) and exits.
+  computer-image:
+    build: ../apps/computer
+    image: openmuse-computer:local
+    entrypoint: ["/bin/true"]
+    command: []
+    restart: "no"
+    network_mode: none
+
+networks:
+  edge: {}
+  browser: {}
+  db:
+    internal: true
+  docker-api:
+    internal: true
+
 volumes:
-  browser-profiles:
+  api-data: {}
+  postgres-data: {}
+  browser-profiles: {}
+  caddy-data: {}
+  caddy-config: {}

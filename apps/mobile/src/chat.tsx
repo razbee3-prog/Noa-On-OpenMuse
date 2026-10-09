@@ -925,7 +925,7 @@ export function ChatScreen({
               </Text>
             </Pressable>
             <TextInput
-              accessibilityLabel="Message OpenMuse"
+              accessibilityLabel="Message Noa"
               value={draft}
               onChangeText={setDraft}
               onContentSizeChange={(event) =>
