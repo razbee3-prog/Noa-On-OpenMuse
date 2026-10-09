@@ -25,6 +25,13 @@ Per-user computer containers are created by the API through the socket proxy, wi
 
 The same values are stored as GitHub repository secrets, as a backup.
 
+## Accounts
+
+- iPhone users sign in only with Apple. The server checks Apple's signed identity token against Apple's public keys and the audience in `APPLE_AUDIENCES` (default `com.razbhimani.noa`; optional key in `/opt/noa/.env`). The owner ID is a hash of the Apple user ID.
+- New accounts need a one-time invite code. Sign in to the web app with `OPENMUSE_ACCESS_KEY` (admin), open Apps, and press **Create invite**. Codes work once and expire after 14 days.
+- Sessions last 30 days. The iPhone keeps its session in the Keychain; the web app keeps it until the tab closes.
+- Limits per account: 10 sign-in attempts a minute per IP, 2 running agent tasks, 2 active browser sessions and 4 saved browser profiles. PDFs live under `/data/files/<owner-hash>/`.
+
 ## Deploys
 
 [.github/workflows/deploy.yml](../.github/workflows/deploy.yml) runs on every push to `main` (and manually). It rsyncs the checkout to `/opt/noa/app/` and runs [infra/deploy.sh](../infra/deploy.sh), which rebuilds, restarts, and waits for `https://$SITE_ADDRESS/api/health`.

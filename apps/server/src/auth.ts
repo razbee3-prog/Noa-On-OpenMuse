@@ -1,9 +1,13 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { link, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { ADMIN_OWNER } from "./accounts.ts";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
+
+export type Role = "admin" | "member";
+export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 const digest = (value: string) => createHash("sha256").update(value).digest();
 export class Auth {
@@ -20,24 +24,37 @@ export class Auth {
         !timingSafeEqual(digest(accessKey), digest(this.config.accessKey)))
     )
       throw new AppError("Access key is incorrect", 401);
+    return { ...(await this.issue(ADMIN_OWNER, "admin")), mode: this.config.mode };
+  }
+  async issue(owner: string, role: Role) {
     const token = randomBytes(32).toString("base64url");
+    const expiresAt = Date.now() + SESSION_TTL_MS;
     await this.db.put("system", "sessions", {
       id: digest(token).toString("hex"),
-      owner: "local-user",
-      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      owner,
+      role,
+      expiresAt,
     });
-    return { token, mode: this.config.mode };
+    return { token, role, expiresAt: new Date(expiresAt).toISOString() };
   }
-  async owner(authorization?: string) {
-    if (!authorization?.startsWith("Bearer ")) throw new AppError("Sign in to OpenMuse", 401);
-    const session = await this.db.get<{ owner: string; expiresAt: number }>(
+  async context(authorization?: string): Promise<{ owner: string; role: Role }> {
+    if (!authorization?.startsWith("Bearer ")) throw new AppError("Sign in to Noa", 401);
+    const session = await this.db.get<{ owner: string; role?: Role; expiresAt: number }>(
       "system",
       "sessions",
       digest(authorization.slice(7)).toString("hex"),
     );
     if (!session || session.expiresAt < Date.now())
       throw new AppError("Session expired. Sign in again.", 401);
-    return session.owner;
+    // Sessions created before accounts existed were all access-key (admin) sessions.
+    return { owner: session.owner, role: session.role ?? "admin" };
+  }
+  async owner(authorization?: string) {
+    return (await this.context(authorization)).owner;
+  }
+  async revoke(authorization?: string) {
+    if (!authorization?.startsWith("Bearer ")) return;
+    await this.db.remove("system", "sessions", digest(authorization.slice(7)).toString("hex"));
   }
   sign(owner: string, path: string) {
     const expires = String(Date.now() + 15 * 60 * 1000);

@@ -27,17 +27,38 @@ export class MuseApi {
   }
 }
 
-export async function createSession(
-  accessKey?: string,
-): Promise<{ token: string; mode: "sample" | "live" }> {
-  const response = await fetch(`${API_URL}/api/session`, {
+export interface Session {
+  token: string;
+  mode: "sample" | "live";
+  role?: "admin" | "member";
+  expiresAt?: string;
+}
+async function postSession(path: string, body: unknown): Promise<Session> {
+  const response = await fetch(`${API_URL}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accessKey }),
+    body: JSON.stringify(body),
   });
-  const payload = await readApiPayload<{ token: string; mode: "sample" | "live" }>(
-    response,
-    "Could not open your workspace.",
-  );
-  return payload;
+  return readApiPayload<Session>(response, "Could not open your workspace.");
+}
+export function createSession(accessKey?: string): Promise<Session> {
+  return postSession("/api/session", { accessKey });
+}
+export function createAppleSession(input: {
+  identityToken: string;
+  inviteCode?: string;
+  fullName?: string;
+}): Promise<Session> {
+  return postSession("/api/session/apple", input);
+}
+/** A saved session is kept unless the server explicitly rejects it (offline launches still open). */
+export async function sessionStillValid(token: string) {
+  try {
+    const response = await fetch(`${API_URL}/api/account`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.status !== 401;
+  } catch {
+    return true;
+  }
 }

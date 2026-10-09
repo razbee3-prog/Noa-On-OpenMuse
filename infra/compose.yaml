@@ -45,6 +45,7 @@ services:
       PUBLIC_API_URL: https://${SITE_ADDRESS}
       ALLOWED_ORIGINS: https://${SITE_ADDRESS}
       TRUST_PROXY: "true"
+      APPLE_AUDIENCES: ${APPLE_AUDIENCES:-com.razbhimani.noa}
       TASK_WORKER_ENABLED: "true"
       WEB_SEARCH_ENABLED: "true"
       BROWSER_WORKER_URL: http://browser-worker:8790

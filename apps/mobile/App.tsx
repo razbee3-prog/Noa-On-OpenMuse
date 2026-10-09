@@ -1,4 +1,5 @@
 import { CopilotKitProvider } from "@copilotkit/react-native/headless";
+import * as AppleAuthentication from "expo-apple-authentication";
 import { StatusBar } from "expo-status-bar";
 import {
   Bell,
@@ -16,6 +17,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -32,12 +34,21 @@ import {
   IdeasScreen,
 } from "./src/agent-ui";
 import { AgentWorkspaceProvider, useAgentWorkspace } from "./src/agent-workspace";
-import { API_URL, createSession, MuseApi } from "./src/api";
+import {
+  API_URL,
+  createAppleSession,
+  createSession,
+  MuseApi,
+  type Session,
+  sessionStillValid,
+} from "./src/api";
 import { ChatScreen, WorkspaceTools } from "./src/chat";
 import { ComputerEntry } from "./src/computer";
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
+import { onSignedOut } from "./src/session-events";
+import { clearSession, loadSession, saveSession } from "./src/session-store";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
 import { Button, Card, colors, ErrorNotice, Field, IconButton, Mascot, s } from "./src/ui";
 import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
@@ -69,23 +80,74 @@ const titles: Partial<Record<Section, { title: string; subtitle: string }>> = {
 export default function App() {
   const [token, setToken] = useState("");
   const [accessKey, setAccessKey] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [needsInvite, setNeedsInvite] = useState(false);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
-  const connect = useCallback(async (key?: string) => {
+  // The iPhone app signs in only with Apple; the web app keeps the admin access key.
+  const appleOnly = Platform.OS === "ios";
+  const finish = useCallback(async (session: Session) => {
+    await saveSession(session);
+    setToken(session.token);
+  }, []);
+  const connect = useCallback(
+    async (key?: string) => {
+      setBusy(true);
+      setError("");
+      try {
+        await finish(await createSession(key));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [finish],
+  );
+  const signInWithApple = useCallback(async () => {
     setBusy(true);
     setError("");
     try {
-      const session = await createSession(key);
-      setToken(session.token);
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      if (!credential.identityToken) throw new Error("Apple did not return a sign-in token.");
+      const fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
+        .filter(Boolean)
+        .join(" ");
+      await finish(
+        await createAppleSession({
+          identityToken: credential.identityToken,
+          inviteCode: inviteCode.trim() || undefined,
+          fullName: fullName || undefined,
+        }),
+      );
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if ((e as { code?: string }).code === "ERR_REQUEST_CANCELED") return;
+      const text = e instanceof Error ? e.message : String(e);
+      if (/invite code/i.test(text)) setNeedsInvite(true);
+      setError(text);
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [finish, inviteCode]);
+  useEffect(() => onSignedOut(() => setToken("")), []);
   useEffect(() => {
-    void connect();
-  }, [connect]);
+    void (async () => {
+      const saved = await loadSession();
+      if (saved && (await sessionStillValid(saved.token))) {
+        setToken(saved.token);
+        setBusy(false);
+        return;
+      }
+      await clearSession();
+      if (appleOnly) setBusy(false);
+      else await connect();
+    })();
+  }, [appleOnly, connect]);
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
@@ -119,20 +181,47 @@ export default function App() {
             ) : (
               <Card style={{ width: "100%" }}>
                 <ErrorNotice error={error} />
-                <Field
-                  label="Workspace access key"
-                  value={accessKey}
-                  onChangeText={setAccessKey}
-                  secureTextEntry
-                  placeholder="Required for a live workspace"
-                />
-                <Button primary onPress={() => void connect(accessKey || undefined)}>
-                  Open workspace
-                </Button>
-                <Text style={[s.small, { marginTop: 15 }]}>
-                  Local workspaces open without a key. Make sure your OpenMuse server is running at{" "}
-                  {API_URL}.
-                </Text>
+                {appleOnly ? (
+                  <>
+                    {needsInvite ? (
+                      <Field
+                        label="Invite code"
+                        value={inviteCode}
+                        onChangeText={setInviteCode}
+                        autoCapitalize="characters"
+                        autoCorrect={false}
+                        placeholder="NOA-XXXXX-XXXXX"
+                      />
+                    ) : null}
+                    <AppleAuthentication.AppleAuthenticationButton
+                      buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                      cornerRadius={14}
+                      style={{ width: "100%", height: 50 }}
+                      onPress={() => void signInWithApple()}
+                    />
+                    <Text style={[s.small, { marginTop: 15 }]}>
+                      New here? Sign in with Apple, then enter the invite code you were sent.
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Field
+                      label="Workspace access key"
+                      value={accessKey}
+                      onChangeText={setAccessKey}
+                      secureTextEntry
+                      placeholder="Required for a live workspace"
+                    />
+                    <Button primary onPress={() => void connect(accessKey || undefined)}>
+                      Open workspace
+                    </Button>
+                    <Text style={[s.small, { marginTop: 15 }]}>
+                      Local workspaces open without a key. Make sure your OpenMuse server is running
+                      at {API_URL}.
+                    </Text>
+                  </>
+                )}
               </Card>
             )}
           </View>

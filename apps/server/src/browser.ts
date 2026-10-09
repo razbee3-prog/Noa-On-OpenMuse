@@ -37,6 +37,9 @@ function assertSessionId(id: string): void {
   if (!BROWSER_SESSION_ID.test(id)) throw new AppError("Browser session not found", 404);
 }
 
+// The shared worker runs 3 sessions and keeps 20 profiles, split fairly across ~5 accounts.
+export const MAX_ACTIVE_PER_OWNER = 2;
+export const MAX_PROFILES_PER_OWNER = 4;
 export class BrowserService {
   private readonly queues = new Map<string, Promise<unknown>>();
   private health?: { checkedAt: number; reachable: Promise<boolean> };
@@ -126,6 +129,17 @@ export class BrowserService {
     return this.decorate(owner, session);
   }
   async create(owner: string, url: string, signal?: AbortSignal) {
+    const owned = await this.db.list<BrowserSession>(owner, "browsers");
+    if (owned.filter((session) => session.status === "active").length >= MAX_ACTIVE_PER_OWNER)
+      throw new AppError(
+        `Close one of your active browser sessions before opening another (limit ${MAX_ACTIVE_PER_OWNER}).`,
+        409,
+      );
+    if (owned.length >= MAX_PROFILES_PER_OWNER)
+      throw new AppError(
+        `You have ${MAX_PROFILES_PER_OWNER} saved browser profiles; reopen one of them instead.`,
+        409,
+      );
     const id = randomUUID();
     // Record ownership before calling the worker, including when its response is lost.
     await this.db.put(owner, "browsers", {

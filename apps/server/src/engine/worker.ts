@@ -20,6 +20,20 @@ export type TaskHandler = (
   task: AgentTask,
   context: TaskContext,
 ) => Promise<Partial<AgentTask>>;
+const MAX_TASKS_PER_OWNER = 2;
+/** Interleaves owners (oldest first within each owner) so every account gets a turn each tick. */
+function roundRobinByOwner<T extends { owner: string }>(records: T[]): T[] {
+  const queues = new Map<string, T[]>();
+  for (const record of records) {
+    const queue = queues.get(record.owner);
+    if (queue) queue.push(record);
+    else queues.set(record.owner, [record]);
+  }
+  const ordered: T[] = [];
+  for (let round = 0; ordered.length < records.length; round++)
+    for (const queue of queues.values()) if (queue[round]) ordered.push(queue[round]);
+  return ordered;
+}
 export class TaskWorker {
   private timer?: ReturnType<typeof setInterval>;
   private ticking = false;
@@ -27,6 +41,7 @@ export class TaskWorker {
   private active = new Map<string, AbortController>();
   // Tasks this worker has started and not yet settled, including ones still being claimed.
   private inFlight = new Set<string>();
+  private inFlightOwners = new Map<string, string>();
   lastTickAt?: string;
   constructor(
     private readonly db: Store,
@@ -85,8 +100,13 @@ export class TaskWorker {
             t.status === "waiting_approval"),
       );
       const eligible = [];
-      for (const record of due) {
+      const perOwner = new Map<string, number>();
+      for (const owner of this.inFlightOwners.values())
+        perOwner.set(owner, (perOwner.get(owner) ?? 0) + 1);
+      for (const record of roundRobinByOwner(due)) {
         if (this.inFlight.size + eligible.length >= 3) break;
+        // One busy account cannot take every slot from the others.
+        if ((perOwner.get(record.owner) ?? 0) >= MAX_TASKS_PER_OWNER) continue;
         if (record.value.status === "waiting_approval") {
           const action = record.value.actionId
             ? await this.db.get<{ status: string; expiresAt?: string }>(
@@ -110,11 +130,18 @@ export class TaskWorker {
           else if (action && ["awaiting_review", "executing"].includes(action.status)) continue;
         }
         eligible.push(record);
+        perOwner.set(record.owner, (perOwner.get(record.owner) ?? 0) + 1);
       }
       // Runs outlive the tick, so a long task does not stop later ticks from starting queued work.
       for (const { owner, value } of eligible) {
         this.inFlight.add(value.id);
-        started.push(this.run(owner, value).finally(() => this.inFlight.delete(value.id)));
+        this.inFlightOwners.set(value.id, owner);
+        started.push(
+          this.run(owner, value).finally(() => {
+            this.inFlight.delete(value.id);
+            this.inFlightOwners.delete(value.id);
+          }),
+        );
       }
     } finally {
       this.ticking = false;

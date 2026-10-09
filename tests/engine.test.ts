@@ -242,3 +242,26 @@ test("a failed run record does not leave the task stuck in the worker", async ()
     await db.close();
   }
 });
+test("one busy account cannot take every worker slot from another", async () => {
+  const db = await createStore();
+  try {
+    for (let i = 0; i < 5; i++) await db.put("busy-owner", "tasks", task(`busy-${i}`));
+    await db.put("quiet-owner", "tasks", task("quiet-0"));
+    const started: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const worker = new TaskWorker(db, async (_owner, current) => {
+      started.push(current.id);
+      await gate;
+      return { status: "succeeded" as const, result: "done" };
+    });
+    const tick = worker.tick();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.ok(started.includes("quiet-0"), "the quiet account's task starts in the first tick");
+    assert.equal(started.filter((id) => id.startsWith("busy-")).length, 2);
+    release();
+    await tick;
+  } finally {
+    await db.close();
+  }
+});
