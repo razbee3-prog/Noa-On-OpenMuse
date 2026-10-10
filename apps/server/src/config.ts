@@ -38,7 +38,7 @@ export interface Config {
   /** Apple Sign In audiences (iOS bundle IDs) accepted for identity tokens. */
   appleAudiences?: string[];
   plaid?: { clientId: string; secret: string; environment: "sandbox" | "production" };
-  nango?: { secretKey: string; baseUrl: string };
+  nango?: { secretKey: string; baseUrl: string; approvedConnectors: string[] };
   encryptionKey?: string;
   model?: string;
   jevMode?: "off" | "sample" | "live";
@@ -157,6 +157,10 @@ export function readConfig(): Config {
       ? {
           secretKey: process.env.NANGO_SECRET_KEY,
           baseUrl: process.env.NANGO_BASE_URL ?? "https://api.nango.dev",
+          approvedConnectors: (process.env.NANGO_APPROVED_CONNECTORS ?? "")
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean),
         }
       : undefined,
     appleAudiences: (process.env.APPLE_AUDIENCES ?? "")

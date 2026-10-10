@@ -12,6 +12,15 @@ import type { ActionProposal } from "../packages/domain/src/index.ts";
 import { NangoClient } from "../packages/integrations/src/nango.ts";
 import { config as baseConfig } from "./helpers/computer.ts";
 
+const approvedConfig = {
+  ...baseConfig,
+  nango: {
+    secretKey: "test",
+    baseUrl: "http://nango.test",
+    approvedConnectors: ["quickbooks", "gusto"],
+  },
+};
+
 const PROVIDERS = [
   "outlook",
   "slack",
@@ -146,7 +155,7 @@ beforeEach(() => {
 async function setup() {
   const { app, auth } = await createApp(
     db,
-    { ...baseConfig, dataDir: directory, encryptionKey: randomBytes(32).toString("base64") },
+    { ...approvedConfig, dataDir: directory, encryptionKey: randomBytes(32).toString("base64") },
     { nangoClient: client },
   );
   const alice = (await auth.issue("apple-alice", "member")).token;
@@ -161,7 +170,7 @@ async function setup() {
 }
 
 const tool = (owner: string, name: string) => {
-  const service = new ConnectorService(baseConfig, client);
+  const service = new ConnectorService(approvedConfig, client);
   const found = connectorReadTools(service, owner).find((t) => t.name === name);
   assert.ok(found, name);
   return found.execute as (
@@ -330,3 +339,15 @@ for (const [kind, data, key, sendPath] of [
     );
   });
 }
+
+test("QuickBooks and Gusto stay hidden until their production access is approved", async () => {
+  const hidden = new ConnectorService(baseConfig, client);
+  assert.deepEqual(
+    (await hidden.list("apple-dave")).map((c) => c.id),
+    ["outlook", "slack", "teams", "jira", "stripe"],
+  );
+  await assert.rejects(hidden.connect("apple-dave", "quickbooks"), /not configured/);
+  await assert.rejects(hidden.connect("apple-dave", "gusto"), /not configured/);
+  const approved = new ConnectorService(approvedConfig, client);
+  assert.ok((await approved.list("apple-dave")).some((c) => c.id === "gusto"));
+});

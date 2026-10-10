@@ -30,6 +30,8 @@ export interface ConnectorSpec {
   capabilities: string[];
   /** Minimum scopes requested at connect time (enforced per Nango connect session). */
   scopes?: { user_scopes?: string; connection_config?: { oauth_scopes_override?: string } };
+  /** Hidden until the provider approves production access (listed in NANGO_APPROVED_CONNECTORS). */
+  needsProductionApproval?: boolean;
 }
 
 export const CONNECTORS: ConnectorSpec[] = [
@@ -84,6 +86,7 @@ export const CONNECTORS: ConnectorSpec[] = [
     name: "QuickBooks",
     description: "Profit and loss, invoices, expenses, balances",
     providers: ["quickbooks", "quickbooks-sandbox"],
+    needsProductionApproval: true,
     scopes: { connection_config: { oauth_scopes_override: "com.intuit.quickbooks.accounting" } },
     capabilities: ["Reports", "Invoices", "Expenses"],
   },
@@ -99,6 +102,7 @@ export const CONNECTORS: ConnectorSpec[] = [
     name: "Gusto",
     description: "Payroll runs and pay stubs you can see",
     providers: ["gusto", "gusto-demo"],
+    needsProductionApproval: true,
     capabilities: ["Payrolls", "Pay stubs"],
   },
 ];
@@ -110,7 +114,10 @@ export class ConnectorService {
   private readonly client?: NangoClient;
   private integrationCache?: { at: number; map: Map<ConnectorId, string> };
 
+  private readonly approved: Set<string>;
+
   constructor(config: Config, client?: NangoClient) {
+    this.approved = new Set(config.nango?.approvedConnectors ?? []);
     this.client =
       client ??
       (config.nango ? new NangoClient(config.nango.secretKey, config.nango.baseUrl) : undefined);
@@ -128,7 +135,8 @@ export class ConnectorService {
       return this.integrationCache.map;
     const integrations = await this.client.integrations();
     const map = new Map<ConnectorId, string>();
-    for (const spec of CONNECTORS)
+    for (const spec of CONNECTORS) {
+      if (spec.needsProductionApproval && !this.approved.has(spec.id)) continue;
       for (const provider of spec.providers) {
         const match = integrations.find((i) => i.provider === provider);
         if (match) {
@@ -136,6 +144,7 @@ export class ConnectorService {
           break;
         }
       }
+    }
     this.integrationCache = { at: Date.now(), map };
     return map;
   }
