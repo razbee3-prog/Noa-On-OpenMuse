@@ -1718,11 +1718,20 @@ export function NotificationsSheet() {
     </Sheet>
   );
 }
+let agentSettingsRequested = false;
+/** Opens the agent name & personality settings the next time Apps mounts. */
+export function requestAgentSettings() {
+  agentSettingsRequested = true;
+}
 export function AppsScreen() {
   const { navigate, open } = useWorkspace();
   const { data, mutate } = useAgentWorkspace();
   const [query, setQuery] = useState("");
-  const [settings, setSettings] = useState(false);
+  const [settings, setSettings] = useState(() => {
+    const requested = agentSettingsRequested;
+    agentSettingsRequested = false;
+    return requested;
+  });
   const [name, setName] = useState(data?.identity.name || "Noa on OpenMuse");
   const [tone, setTone] = useState(data?.identity.tone || "warm");
   const [avatar, setAvatar] = useState(data?.identity.avatar || "sky");
@@ -1810,7 +1819,7 @@ export function AppsScreen() {
           ))}
       </Card>
       <Button onPress={() => setSettings(!settings)}>
-        {settings ? "Close agent settings" : "Personality & memory"}
+        {settings ? "Close agent settings" : "Agent name, personality & memory"}
       </Button>
       {settings && (
         <>

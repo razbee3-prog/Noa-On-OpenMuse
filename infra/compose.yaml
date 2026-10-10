@@ -49,6 +49,8 @@ services:
       PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:-}
       PLAID_SECRET: ${PLAID_SECRET:-}
       PLAID_ENV: ${PLAID_ENV:-sandbox}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       TASK_WORKER_ENABLED: "true"
       WEB_SEARCH_ENABLED: "true"
       BROWSER_WORKER_URL: http://browser-worker:8790
