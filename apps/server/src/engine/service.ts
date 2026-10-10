@@ -27,6 +27,7 @@ import type { ActionService } from "../actions.ts";
 import type { BrowserService } from "../browser.ts";
 import { ComputerService } from "../computer.ts";
 import type { Config } from "../config.ts";
+import { ConnectorService } from "../connectors.ts";
 import type { Store } from "../db.ts";
 import { AppError } from "../errors.ts";
 import type { Files } from "../files.ts";
@@ -64,6 +65,7 @@ export class AgentService {
     readonly browser: BrowserService,
     readonly computer: ComputerService = new ComputerService(db, config),
     readonly plaid: PlaidService = new PlaidService(db, config),
+    readonly connectors: ConnectorService = new ConnectorService(config),
   ) {
     this.search = new SearchService(db);
     this.worker = new TaskWorker(db, (owner, task, context) => this.execute(owner, task, context), {

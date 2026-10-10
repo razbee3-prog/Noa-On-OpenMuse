@@ -1726,7 +1726,6 @@ export function requestAgentSettings() {
 export function AppsScreen() {
   const { navigate, open } = useWorkspace();
   const { data, mutate } = useAgentWorkspace();
-  const [query, setQuery] = useState("");
   const [settings, setSettings] = useState(() => {
     const requested = agentSettingsRequested;
     agentSettingsRequested = false;
@@ -1793,30 +1792,20 @@ export function AppsScreen() {
   return (
     <View style={{ gap: 22 }}>
       <AgentStatus />
-      <Field
-        label="Search apps"
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Search connectors"
-      />
-      <ConnectionsScreen query={query} />
+      <ConnectionsScreen />
       <Text style={s.heading}>On your computer</Text>
       <Card style={{ paddingVertical: 3, backgroundColor: "#F4F5F6" }}>
-        {shortcuts
-          .filter((item) =>
-            `${item.title} ${item.detail}`.toLowerCase().includes(query.toLowerCase()),
-          )
-          .map((item) => (
-            <LinkRow
-              key={item.section}
-              icon={item.icon}
-              title={item.title}
-              detail={item.detail}
-              onPress={() =>
-                item.section === "browser" ? open({ type: "computer" }) : navigate(item.section)
-              }
-            />
-          ))}
+        {shortcuts.map((item) => (
+          <LinkRow
+            key={item.section}
+            icon={item.icon}
+            title={item.title}
+            detail={item.detail}
+            onPress={() =>
+              item.section === "browser" ? open({ type: "computer" }) : navigate(item.section)
+            }
+          />
+        ))}
       </Card>
       <Button onPress={() => setSettings(!settings)}>
         {settings ? "Close agent settings" : "Agent name, personality & memory"}

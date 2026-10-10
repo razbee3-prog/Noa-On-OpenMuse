@@ -593,7 +593,12 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
       setBusy(false);
     }
   }
-  const email = action.kind === "email.send";
+  const email = action.kind === "email.send" || action.kind === "outlook.email.send";
+  const slack = action.kind === "slack.message.send";
+  const editable =
+    action.kind === "email.send" ||
+    action.kind === "calendar.create" ||
+    action.kind === "calendar.update";
   return (
     <Sheet
       title={pending ? "One last look" : action.title}
@@ -618,7 +623,15 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
       </View>
       <Card style={{ gap: 13 }}>
         <ReviewLine label="Account" value={action.account || w.profile.email} />
-        {email ? (
+        {slack ? (
+          <>
+            <ReviewLine label="Channel" value={String(d.channelName || d.channel || "")} />
+            <View style={s.divider} />
+            <Text selectable style={[s.text, { lineHeight: 25 }]}>
+              {String(d.text || "")}
+            </Text>
+          </>
+        ) : email ? (
           <>
             <ReviewLine label="To" value={arrayText(d.to)} />
             <ReviewLine label="Cc" value={arrayText(d.cc) || "None"} />
@@ -710,7 +723,7 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
                   ? "Approve & send"
                   : "Approve change"}
             </Button>
-            {action.kind !== "calendar.delete" && (
+            {editable && (
               <Button icon={Edit3} disabled={busy} onPress={() => void edit()}>
                 Edit details
               </Button>

@@ -3,6 +3,8 @@ import {
   type ActionProposal,
   type CalendarEvent,
   type ProposalInput,
+  proposalProvider,
+  proposalProviderLabel,
   proposalSchema,
 } from "../../../packages/domain/src/index.ts";
 import type { Store } from "./db.ts";
@@ -24,8 +26,11 @@ interface Options {
     target?: CalendarEvent;
     targetVersion?: string;
   }>;
-  connected: (owner: string) => Promise<boolean>;
-  connection?: (owner: string) => Promise<{ id: string; account: string } | null>;
+  connected: (owner: string, kind: ProposalInput["kind"]) => Promise<boolean>;
+  connection?: (
+    owner: string,
+    kind: ProposalInput["kind"],
+  ) => Promise<{ id: string; account: string } | null>;
   now?: () => number;
 }
 export class ActionService {
@@ -51,17 +56,22 @@ export class ActionService {
       if (existing) return existing;
     }
     const parsed = proposalSchema.parse(raw);
-    const connection = await this.options.connection?.(owner);
+    const provider = proposalProviderLabel[proposalProvider(parsed.kind)];
+    const connection = await this.options.connection?.(owner, parsed.kind);
     if (this.options.connection && !connection)
-      throw new AppError("Connect Google before preparing an action", 409);
+      throw new AppError(`Connect ${provider} before preparing an action`, 409);
     const prepared = await this.options.prepare?.(owner, parsed, connection?.id);
     const input = proposalSchema.parse(prepared?.input ?? parsed);
     const title =
-      input.kind === "email.send"
+      input.kind === "email.send" || input.kind === "outlook.email.send"
         ? `Send “${input.data.subject}”`
-        : input.kind === "calendar.delete"
-          ? `Delete ${input.data.title}`
-          : `${input.kind === "calendar.create" ? "Create" : "Update"} ${input.data.title}`;
+        : input.kind === "slack.message.send"
+          ? `Post to Slack ${input.data.channelName ?? input.data.channel}`
+          : input.kind === "outlook.calendar.create"
+            ? `Create ${input.data.title} in Outlook`
+            : input.kind === "calendar.delete"
+              ? `Delete ${input.data.title}`
+              : `${input.kind === "calendar.create" ? "Create" : "Update"} ${input.data.title}`;
     const createdAt = new Date(this.now()).toISOString();
     const proposal: ActionProposal = {
       id,
@@ -133,17 +143,20 @@ export class ActionService {
       }
       throw new AppError("This review expired. Create a fresh proposal.", 409);
     }
-    if (decision === "approve" && !(await this.options.connected(owner)))
-      throw new AppError("Google is disconnected. Reconnect before approving this action.", 409);
+    if (decision === "approve" && !(await this.options.connected(owner, proposal.kind)))
+      throw new AppError(
+        `${proposalProviderLabel[proposalProvider(proposal.kind)]} is disconnected. Reconnect before approving this action.`,
+        409,
+      );
     if (decision === "approve" && this.options.connection) {
-      const connection = await this.options.connection(owner);
+      const connection = await this.options.connection(owner, proposal.kind);
       if (
         !connection ||
         connection.id !== proposal.connectionId ||
         connection.account !== proposal.account
       )
         throw new AppError(
-          "Google account or connection changed. Prepare a new action for the connected account.",
+          `${proposalProviderLabel[proposalProvider(proposal.kind)]} account or connection changed. Prepare a new action for the connected account.`,
           409,
         );
     }
