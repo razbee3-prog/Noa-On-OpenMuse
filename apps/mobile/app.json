@@ -1,19 +1,29 @@
 {
   "expo": {
     "name": "Noa on OpenMuse",
-    "slug": "openmuse",
+    "slug": "noa-on-openmuse",
     "scheme": "openmuse",
     "version": "0.1.0",
     "orientation": "default",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.razbhimani.noa",
-      "usesAppleSignIn": true
+      "usesAppleSignIn": true,
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
-      "package": "app.openmuse.mobile"
+      "package": "app.openmuse.mobile",
+      "permissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.DOWNLOAD_WITHOUT_NOTIFICATION",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -25,6 +35,13 @@
       "@config-plugins/react-native-pdf",
       "expo-apple-authentication",
       "expo-secure-store"
-    ]
+    ],
+    "owner": "raz-team",
+    "icon": "./assets/icon.png",
+    "extra": {
+      "eas": {
+        "projectId": "d2280c10-023a-42b3-9c67-2cc716bc991f"
+      }
+    }
   }
 }

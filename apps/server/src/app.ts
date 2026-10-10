@@ -181,6 +181,26 @@ export async function createApp(
     await accounts.rename(c.get("owner"), body.displayName);
     return c.json(await accountView(c.get("owner"), c.get("role")));
   });
+  app.delete("/api/account", async (c) => {
+    const owner = c.get("owner");
+    if (owner === ADMIN_OWNER)
+      throw new AppError("The admin workspace can't be deleted from the app", 403);
+    const browsers = await db.list<{ id: string; status?: string }>(owner, "browsers");
+    const cleanup = await Promise.allSettled([
+      plaid.disconnect(owner),
+      google.disconnect(owner),
+      computer.destroy(owner),
+      ...browsers
+        .filter((session) => session.status !== "closed")
+        .map((session) => browser.close(owner, session.id)),
+    ]);
+    for (const result of cleanup)
+      if (result.status === "rejected")
+        console.warn("Account deletion cleanup step failed", String(result.reason));
+    await files.removeOwner(owner);
+    await db.removeOwner(owner);
+    return c.json({ deleted: true });
+  });
   app.post("/api/plaid/connect", async (c) => c.json(await plaid.connect(c.get("owner"))));
   app.post("/api/plaid/complete", async (c) => c.json(await plaid.complete(c.get("owner"))));
   app.post("/api/plaid/sync", async (c) => c.json(await plaid.sync(c.get("owner"))));

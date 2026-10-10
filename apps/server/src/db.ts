@@ -66,6 +66,14 @@ export class Store {
       id,
     ]);
   }
+  /** Deletes every record owned by an account plus its system-level account, session and OAuth rows. */
+  async removeOwner(owner: string): Promise<void> {
+    await this.db.query("DELETE FROM records WHERE owner=$1", [owner]);
+    await this.db.query(
+      "DELETE FROM records WHERE owner='system' AND ((kind='accounts' AND id=$1) OR (kind IN ('sessions','oauth') AND data->>'owner'=$1))",
+      [owner],
+    );
+  }
   async compareAndSwap<T>(
     owner: string,
     kind: string,
