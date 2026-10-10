@@ -125,6 +125,12 @@ export const eventDraftSchema = z
       ctx.addIssue({ code: "custom", message: "Invalid time zone", path: ["timeZone"] });
     }
   });
+export const slackMessageSchema = z.object({
+  channel: z.string().min(1).max(200),
+  channelName: z.string().max(200).optional(),
+  text: z.string().min(1).max(4000),
+  threadTs: z.string().max(64).optional(),
+});
 export const proposalSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("email.send"), data: emailDraftSchema }),
   z.object({ kind: z.literal("calendar.create"), data: eventDraftSchema }),
@@ -136,7 +142,22 @@ export const proposalSchema = z.discriminatedUnion("kind", [
     kind: z.literal("calendar.delete"),
     data: z.object({ calendarId: z.string(), eventId: z.string().min(1), title: z.string() }),
   }),
+  z.object({ kind: z.literal("outlook.email.send"), data: emailDraftSchema }),
+  z.object({ kind: z.literal("outlook.calendar.create"), data: eventDraftSchema }),
+  z.object({ kind: z.literal("slack.message.send"), data: slackMessageSchema }),
 ]);
+export type ProposalProvider = "google" | "outlook" | "slack";
+export function proposalProvider(kind: string): ProposalProvider {
+  if (kind.startsWith("outlook.")) return "outlook";
+  if (kind.startsWith("slack.")) return "slack";
+  return "google";
+}
+export const proposalProviderLabel: Record<ProposalProvider, string> = {
+  google: "Google",
+  outlook: "Outlook",
+  slack: "Slack",
+};
+export type SlackMessageDraft = z.infer<typeof slackMessageSchema>;
 export type EmailDraft = z.infer<typeof emailDraftSchema>;
 export type EventDraft = z.infer<typeof eventDraftSchema>;
 export type ProposalInput = z.infer<typeof proposalSchema>;

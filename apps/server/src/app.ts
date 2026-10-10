@@ -9,8 +9,10 @@ import { z } from "zod";
 import {
   calendarRangeSchema,
   emailDraftSchema,
+  proposalProvider,
   proposalSchema,
 } from "../../../packages/domain/src/index.ts";
+import type { NangoClient } from "../../../packages/integrations/src/nango.ts";
 import type { PlaidClient } from "../../../packages/integrations/src/plaid.ts";
 import { Accounts, ADMIN_OWNER, type AppleVerifier } from "./accounts.ts";
 import { ActionService } from "./actions.ts";
@@ -20,6 +22,7 @@ import { BrowserService } from "./browser.ts";
 import { ComputerService, type DockerRunner } from "./computer.ts";
 import { computerRoutes } from "./computer-routes.ts";
 import { assertApiDeploymentConfig, type Config } from "./config.ts";
+import { ConnectorService } from "./connectors.ts";
 import type { Store } from "./db.ts";
 import { agentRoutes } from "./engine/routes.ts";
 import { AgentService } from "./engine/service.ts";
@@ -33,7 +36,12 @@ import { WorkspaceService } from "./workspace.ts";
 export async function createApp(
   db: Store,
   config: Config,
-  options: { docker?: DockerRunner; appleVerifier?: AppleVerifier; plaidClient?: PlaidClient } = {},
+  options: {
+    docker?: DockerRunner;
+    appleVerifier?: AppleVerifier;
+    plaidClient?: PlaidClient;
+    nangoClient?: NangoClient;
+  } = {},
 ) {
   assertApiDeploymentConfig(config);
   const auth = await createAuth(db, config),
@@ -41,17 +49,47 @@ export async function createApp(
     files = new Files(db, config, auth),
     google = new GoogleAuth(db, config),
     workspace = new WorkspaceService(db, config, files, google);
+  const connectors = new ConnectorService(config, options.nangoClient);
   const actions = new ActionService(db, {
-    execute: (owner, input, connectionId, targetVersion) =>
-      workspace.execute(owner, input, connectionId, targetVersion),
-    prepare: (owner, input, connectionId) => workspace.prepare(owner, input, connectionId),
-    connected: (owner) => workspace.connected(owner),
-    connection: (owner) => workspace.connection(owner),
+    execute: (owner, input, connectionId, targetVersion) => {
+      if (input.kind === "outlook.email.send") return connectors.sendOutlookMail(owner, input.data);
+      if (input.kind === "outlook.calendar.create")
+        return connectors.createOutlookEvent(owner, input.data);
+      if (input.kind === "slack.message.send")
+        return connectors.sendSlackMessage(owner, input.data);
+      return workspace.execute(owner, input, connectionId, targetVersion);
+    },
+    prepare: async (owner, input, connectionId) =>
+      proposalProvider(input.kind) === "google"
+        ? workspace.prepare(owner, input, connectionId)
+        : { input },
+    connected: async (owner, kind) => {
+      const provider = proposalProvider(kind);
+      return provider === "google"
+        ? workspace.connected(owner)
+        : Boolean(await connectors.account(owner, provider));
+    },
+    connection: (owner, kind) => {
+      const provider = proposalProvider(kind);
+      return provider === "google"
+        ? workspace.connection(owner)
+        : connectors.account(owner, provider);
+    },
   });
   const browser = new BrowserService(db, config, auth, files);
   const computer = new ComputerService(db, config, options.docker);
   const plaid = new PlaidService(db, config, options.plaidClient);
-  const agent = new AgentService(db, config, workspace, files, actions, browser, computer, plaid);
+  const agent = new AgentService(
+    db,
+    config,
+    workspace,
+    files,
+    actions,
+    browser,
+    computer,
+    plaid,
+    connectors,
+  );
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
   const runtime = makeRuntime(config, agent, auth, accounts, intelligence);
   const app = new Hono<{ Variables: { owner: string; role: "admin" | "member" } }>();
@@ -189,6 +227,7 @@ export async function createApp(
     const cleanup = await Promise.allSettled([
       plaid.disconnect(owner),
       google.disconnect(owner),
+      connectors.disconnectAll(owner),
       computer.destroy(owner),
       ...browsers
         .filter((session) => session.status !== "closed")
@@ -205,6 +244,19 @@ export async function createApp(
   app.post("/api/plaid/complete", async (c) => c.json(await plaid.complete(c.get("owner"))));
   app.post("/api/plaid/sync", async (c) => c.json(await plaid.sync(c.get("owner"))));
   app.post("/api/plaid/disconnect", async (c) => c.json(await plaid.disconnect(c.get("owner"))));
+  app.get("/api/connectors", async (c) => c.json(await connectors.list(c.get("owner"))));
+  app.post("/api/connectors/:id/connect", async (c) =>
+    c.json(
+      await connectors.connect(
+        c.get("owner"),
+        c.req.param("id"),
+        config.mode === "live" ? await accounts.displayName(c.get("owner")) : undefined,
+      ),
+    ),
+  );
+  app.post("/api/connectors/:id/disconnect", async (c) =>
+    c.json(await connectors.disconnect(c.get("owner"), c.req.param("id"))),
+  );
   const requireAdmin = (role: string) => {
     if (role !== "admin") throw new AppError("Only the workspace admin can manage invites", 403);
   };
@@ -224,6 +276,7 @@ export async function createApp(
     snapshot.connections = [
       ...snapshot.connections.filter((connection) => connection.id !== "plaid"),
       await plaid.status(c.get("owner")),
+      ...(await connectors.list(c.get("owner"))),
     ];
     if (config.mode === "live")
       snapshot.profile = { ...snapshot.profile, name: await accounts.displayName(c.get("owner")) };

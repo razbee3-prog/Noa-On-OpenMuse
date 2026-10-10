@@ -341,7 +341,9 @@ export class WorkspaceService {
             ? this.config.mode === "sample"
               ? "sample"
               : "connected"
-            : "disconnected",
+            : this.config.mode === "live" && !this.config.googleClientId
+              ? "unconfigured"
+              : "disconnected",
           account:
             tokens?.account ?? (this.config.mode === "sample" ? "alex@example.com" : undefined),
           capabilities:
@@ -394,7 +396,14 @@ export class WorkspaceService {
       for (const id of input.data.attachmentIds) await this.files.get(owner, id);
       return { input };
     }
-    if (input.kind === "calendar.create" || this.config.mode === "sample") return { input };
+    if (
+      input.kind === "calendar.create" ||
+      input.kind === "outlook.email.send" ||
+      input.kind === "outlook.calendar.create" ||
+      input.kind === "slack.message.send" ||
+      this.config.mode === "sample"
+    )
+      return { input };
     const reviewed = await this.google(owner, connectionId).reviewEvent(
       input.data.calendarId,
       input.data.eventId,
@@ -467,6 +476,12 @@ export class WorkspaceService {
       const receipt = await google.sendEmail(input.data, attachments);
       return `Gmail sent message · ${receipt.id}`;
     }
+    if (
+      input.kind === "outlook.email.send" ||
+      input.kind === "outlook.calendar.create" ||
+      input.kind === "slack.message.send"
+    )
+      throw new AppError("Connector actions run through the connector service", 500);
     if (input.kind === "calendar.delete") {
       await google.deleteEvent(input.data.calendarId, input.data.eventId, targetVersion);
       await this.db.remove(owner, "events", input.data.eventId);

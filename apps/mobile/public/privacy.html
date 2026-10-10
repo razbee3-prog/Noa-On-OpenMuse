@@ -14,7 +14,7 @@
 <ul>
 <li><strong>Account:</strong> the anonymous user identifier Sign in with Apple provides, your email address if you choose to share it (it may be an Apple private relay address), and a display name.</li>
 <li><strong>Content you create:</strong> chat messages, tasks, goals, memories, files you upload, browser sessions and files in your agent's Linux computer.</li>
-<li><strong>Connected services you choose to link:</strong> Google (Gmail and Calendar) and, through Plaid, your bank account balances and transactions. Connection tokens are encrypted at rest. Bank access is read-only; Noa cannot move money.</li>
+<li><strong>Connected services you choose to link:</strong> Google (Gmail and Calendar); through Plaid, your bank account balances and transactions; and, through Nango, Outlook (mail and calendar), Slack, Microsoft Teams, Jira, QuickBooks, Stripe and Gusto. Google and Plaid tokens are encrypted at rest on our server. Tokens for services connected through Nango are held by Nango, not on our servers. Teams, Jira, QuickBooks, Stripe and Gusto are read-only; Outlook mail, Outlook calendar changes and Slack messages are only sent after you approve each one in the app. Bank access is read-only; Noa cannot move money.</li>
 <li><strong>Diagnostics:</strong> server logs needed to run and secure the service.</li>
 </ul>
 <h2>How it is used</h2>
@@ -25,10 +25,17 @@
 <li><strong>CopilotKit</strong> stores chat threads so conversations can be reopened.</li>
 <li><strong>Plaid</strong> connects to your bank when you link one.</li>
 <li><strong>Google</strong> when you connect Gmail or Calendar.</li>
+<li><strong>Nango</strong> (nango.dev) stores sign-in tokens for, and relays our requests to, the services below when you connect them.</li>
+<li><strong>Microsoft</strong> when you connect Outlook or Microsoft Teams.</li>
+<li><strong>Slack</strong> when you connect Slack.</li>
+<li><strong>Atlassian</strong> when you connect Jira.</li>
+<li><strong>Intuit</strong> when you connect QuickBooks.</li>
+<li><strong>Stripe</strong> when you connect Stripe with a restricted read-only key.</li>
+<li><strong>Gusto</strong> when you connect Gusto.</li>
 <li><strong>DigitalOcean</strong> hosts the server and database.</li>
 </ul>
 <h2>Retention and deletion</h2>
-<p>Data is kept while your account exists. You can delete your account at any time in the app under Apps &gt; Account &gt; Delete account. This permanently removes your account, sessions, tasks, memories, files, browser data, computer workspace and connected-service tokens from our servers, and disconnects linked banks from Plaid.</p>
+<p>Data is kept while your account exists. You can delete your account at any time in the app under Apps &gt; Account &gt; Delete account. This permanently removes your account, sessions, tasks, memories, files, browser data, computer workspace and connected-service tokens from our servers, disconnects linked banks from Plaid, and deletes every connection you made through Nango.</p>
 <h2>Security</h2>
 <p>All traffic uses HTTPS. Connection tokens are encrypted with AES-256-GCM. Sessions are stored in the iOS Keychain on your device.</p>
 <h2>Children</h2>

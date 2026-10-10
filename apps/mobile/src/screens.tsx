@@ -1,7 +1,6 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import {
-  ArrowDownToLine,
   ArrowUpRight,
   CalendarDays,
   Check,
@@ -12,7 +11,6 @@ import {
   FileText,
   Globe2,
   Inbox,
-  Landmark,
   Link2,
   Mail,
   Plus,
@@ -1184,193 +1182,244 @@ export function ActivityScreen() {
     </View>
   );
 }
-export function ConnectionsScreen({ query = "" }: { query?: string }) {
-  const { workspace: w, api, refresh, notify, open } = useWorkspace();
-  const [selected, setSelected] = useState<string>();
-  const [busy, setBusy] = useState(false);
+const LOGOS = {
+  gmail: require("../assets/logos/gmail.png"),
+  calendar: require("../assets/logos/gcal.png"),
+  plaid: require("../assets/logos/plaid.png"),
+  outlook: require("../assets/logos/outlook.png"),
+  slack: require("../assets/logos/slack.png"),
+  teams: require("../assets/logos/teams.png"),
+  jira: require("../assets/logos/jira.png"),
+  quickbooks: require("../assets/logos/quickbooks.png"),
+  stripe: require("../assets/logos/stripe.png"),
+  gusto: require("../assets/logos/gusto.png"),
+} as const;
+
+const CONNECTOR_COPY: Record<string, { name: string; description: string }> = {
+  outlook: { name: "Outlook", description: "Mail and calendar" },
+  slack: { name: "Slack", description: "Search and read your messages" },
+  teams: { name: "Microsoft Teams", description: "Read chats and channels" },
+  jira: { name: "Jira", description: "Search and read issues" },
+  quickbooks: { name: "QuickBooks", description: "P&L, invoices, expenses, balances" },
+  stripe: { name: "Stripe", description: "Balance, payments and payouts" },
+  gusto: { name: "Gusto", description: "Payroll runs and pay stubs" },
+};
+
+interface AppRow {
+  id: keyof typeof LOGOS;
+  name: string;
+  description: string;
+  connected: boolean;
+  account?: string;
+  kind: "google" | "plaid" | "nango";
+}
+
+export function ConnectionsScreen() {
+  const { workspace: w, api, refresh, notify } = useWorkspace();
+  const [selected, setSelected] = useState<"google" | "plaid">();
+  const [busy, setBusy] = useState<string>();
   const [error, setError] = useState("");
-  async function connect(capability: "read" | "write") {
-    setBusy(true);
+  async function run(id: string, work: () => Promise<void>) {
+    setBusy(id);
     setError("");
     try {
-      const result = await api.request<{ url: string | null; connected?: boolean }>(
-        "/api/google/connect",
-        { capability },
-      );
+      await work();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(undefined);
+    }
+  }
+  const connectGoogle = (capability: "read" | "write") =>
+    run("google", async () => {
+      const result = await api.request<{ url: string | null }>("/api/google/connect", {
+        capability,
+      });
       if (result.url) {
         await Linking.openURL(result.url);
-        notify("Finish connecting in your browser, then refresh your workspace.");
+        notify("Finish connecting in your browser, then come back.");
       } else {
         await refresh();
         notify("Local Google data is ready.");
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function disconnect() {
-    setBusy(true);
-    setError("");
-    try {
+    });
+  const disconnectGoogle = () =>
+    run("google", async () => {
       await api.request("/api/google/disconnect", {});
       await refresh();
       notify("Google disconnected.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function plaidAction(path: string, message: string) {
-    setBusy(true);
-    setError("");
-    try {
+    });
+  const plaidAction = (path: string, message: string) =>
+    run("plaid", async () => {
       const result = await api.request<{ url?: string }>(`/api/plaid/${path}`, {});
       if (result.url) await Linking.openURL(result.url);
       await refresh();
       notify(message);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  const plaid = w.connections.find((c) => c.id === "plaid");
+    });
+  const connectNango = (row: AppRow) =>
+    run(row.id, async () => {
+      const result = await api.request<{ url: string | null; connected?: boolean }>(
+        `/api/connectors/${row.id}/connect`,
+        {},
+      );
+      if (result.url) {
+        await Linking.openURL(result.url);
+        notify(`Finish connecting ${row.name} in your browser, then come back.`);
+      }
+      await refresh();
+    });
+  const disconnectNango = (row: AppRow) =>
+    run(row.id, async () => {
+      await api.request(`/api/connectors/${row.id}/disconnect`, {});
+      await refresh();
+      notify(`${row.name} disconnected.`);
+    });
+
   const google = w.connections.find((c) => c.id === "google");
-  const connected = google?.status === "connected" || google?.status === "sample";
-  const rows = [
-    { id: "gmail", name: "Gmail", icon: Mail, color: "#EA5B4D", connected, group: "google" },
-    {
-      id: "calendar",
-      name: "Google Calendar",
-      icon: CalendarDays,
-      color: "#4285F4",
-      connected,
-      group: "google",
-    },
-    {
-      id: "browser",
-      name: "Agent computer",
-      icon: Globe2,
-      color: "#1987CF",
-      connected: w.connections.some((c) => c.id === "browser" && c.status === "connected"),
-      group: "browser",
-    },
+  const plaid = w.connections.find((c) => c.id === "plaid");
+  const googleConnected = google?.status === "connected" || google?.status === "sample";
+  const rows: AppRow[] = [
+    ...(google && google.status !== "unconfigured"
+      ? (
+          [
+            { id: "gmail", name: "Gmail", description: "Search, read and send email" },
+            { id: "calendar", name: "Google Calendar", description: "Read and plan your schedule" },
+          ] as const
+        ).map((r) => ({
+          ...r,
+          connected: googleConnected,
+          account: google.account,
+          kind: "google" as const,
+        }))
+      : []),
     ...(plaid && plaid.status !== "unconfigured"
       ? [
           {
-            id: "plaid",
-            name: "Bank (Plaid)",
-            icon: Landmark,
-            color: "#111111",
+            id: "plaid" as const,
+            name: "Plaid",
+            description: "Bank balances and transactions, read-only",
             connected: plaid.status === "connected",
-            group: "plaid",
+            account: plaid.account,
+            kind: "plaid" as const,
           },
         ]
       : []),
-    {
-      id: "openbot",
-      name: "OpenBot",
-      icon: Sparkles,
-      color: "#6866A6",
-      connected: false,
-      group: "openbot",
-    },
-  ].filter((row) => `${row.name} ${row.group}`.toLowerCase().includes(query.toLowerCase()));
+    ...w.connections
+      .filter((c) => c.id in CONNECTOR_COPY && c.status !== "unconfigured")
+      .map((c) => ({
+        id: c.id as keyof typeof LOGOS,
+        name: CONNECTOR_COPY[c.id].name,
+        description: CONNECTOR_COPY[c.id].description,
+        connected: c.status === "connected",
+        account: c.account,
+        kind: "nango" as const,
+      })),
+  ];
+
+  const renderRow = (row: AppRow, index: number, count: number) => (
+    <View
+      key={row.id}
+      style={[
+        s.row,
+        {
+          gap: 14,
+          minHeight: 68,
+          paddingVertical: 10,
+          borderBottomWidth: index < count - 1 ? 1 : 0,
+          borderBottomColor: "#E5E7E9",
+        },
+      ]}
+    >
+      <View
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 10,
+          backgroundColor: "#FFF",
+          alignItems: "center",
+          justifyContent: "center",
+          borderWidth: 1,
+          borderColor: "#ECEDEF",
+        }}
+      >
+        <Image
+          source={LOGOS[row.id]}
+          accessibilityLabel={`${row.name} logo`}
+          style={{ width: 28, height: 28 }}
+          resizeMode="contain"
+        />
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={s.text} numberOfLines={1}>
+          {row.name}
+        </Text>
+        <Text style={s.small} numberOfLines={1}>
+          {row.connected && row.account ? row.account : row.description}
+        </Text>
+      </View>
+      {row.connected ? (
+        <Button
+          small
+          busy={busy === row.id || (row.kind === "google" && busy === "google")}
+          onPress={() =>
+            row.kind === "nango"
+              ? void disconnectNango(row)
+              : setSelected(row.kind === "google" ? "google" : "plaid")
+          }
+        >
+          {row.kind === "nango" ? "Disconnect" : "Manage"}
+        </Button>
+      ) : (
+        <Button
+          small
+          primary
+          busy={busy === row.id || (row.kind === "google" && busy === "google")}
+          onPress={() =>
+            row.kind === "nango"
+              ? void connectNango(row)
+              : row.kind === "google"
+                ? void connectGoogle("read")
+                : setSelected("plaid")
+          }
+        >
+          Connect
+        </Button>
+      )}
+    </View>
+  );
+
   return (
     <View style={{ gap: 22 }}>
-      {query ? null : <AccountCard />}
-      {[true, false].map((isConnected) => {
-        const group = rows.filter((row) => row.connected === isConnected);
+      <AccountCard />
+      <ErrorNotice error={selected ? "" : error} />
+      {(["Connected", "Available"] as const).map((title) => {
+        const group = rows.filter((row) => row.connected === (title === "Connected"));
         if (!group.length) return null;
         return (
-          <View key={String(isConnected)} style={{ gap: 8 }}>
-            <Text style={[s.small, { marginLeft: 12 }]}>
-              {isConnected
-                ? w.mode === "sample"
-                  ? "Your connections"
-                  : "Connected"
-                : "Available integrations"}
-            </Text>
+          <View key={title} style={{ gap: 8 }}>
+            <Text style={[s.small, { marginLeft: 12 }]}>{title}</Text>
             <View style={{ paddingHorizontal: 16, borderRadius: 23, backgroundColor: "#F3F4F5" }}>
-              {group.map((row, index) => (
-                <Pressable
-                  key={row.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Manage ${row.name}`}
-                  onPress={() =>
-                    row.group === "browser" ? open({ type: "computer" }) : setSelected(row.group)
-                  }
-                  style={[
-                    s.row,
-                    {
-                      gap: 14,
-                      minHeight: 61,
-                      borderBottomWidth: index < group.length - 1 ? 1 : 0,
-                      borderBottomColor: "#E5E7E9",
-                    },
-                  ]}
-                >
-                  <View
-                    style={{
-                      width: 29,
-                      height: 29,
-                      borderRadius: 7,
-                      backgroundColor: "#FFF",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <row.icon size={23} color={row.color} />
-                  </View>
-                  <Text style={[s.text, { flex: 1 }]}>{row.name}</Text>
-                  {row.connected && row.group === "google" && w.mode === "sample" && (
-                    <Text style={s.small}>Local data</Text>
-                  )}
-                  {row.connected ? (
-                    <ChevronRight size={18} color="#A4A7AA" />
-                  ) : (
-                    <Text
-                      style={{
-                        fontSize: 13,
-                        color: row.group === "google" ? colors.blueDark : colors.muted,
-                      }}
-                    >
-                      {row.group === "google" ? "Connect" : "Setup"}
-                    </Text>
-                  )}
-                </Pressable>
-              ))}
+              {group.map((row, index) => renderRow(row, index, group.length))}
             </View>
           </View>
         );
       })}
-      {!rows.length && <Text style={s.muted}>No matching connectors.</Text>}
+      {!rows.length && <Text style={s.muted}>No connectors are set up on this server yet.</Text>}
       {selected && (
         <Sheet
-          title={
-            selected === "google"
-              ? "Google connections"
-              : selected === "plaid"
-                ? "Bank (Plaid)"
-                : "OpenBot"
-          }
+          title={selected === "google" ? "Google" : "Plaid"}
           subtitle={
             selected === "google"
               ? google?.account
-              : selected === "plaid"
-                ? (plaid?.account ?? "Read-only balances and transactions")
-                : "A computer for your agent"
+              : (plaid?.account ?? "Read-only balances and transactions")
           }
           onClose={() => setSelected(undefined)}
         >
           {selected === "google" ? (
-            <View style={{ gap: 18 }}>
+            <View style={{ gap: 14 }}>
               <Text style={s.muted}>
-                Bring Gmail and Google Calendar into your conversations. Choose read access, then
-                enable sending and editing when you need it.
+                Gmail and Google Calendar in your conversations. Sending and editing always wait for
+                your review.
               </Text>
               <View style={[s.row, { gap: 7, flexWrap: "wrap" }]}>
                 {google?.capabilities.map((cap) => (
@@ -1378,52 +1427,22 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                 ))}
               </View>
               <ErrorNotice error={error} />
-              <Button busy={busy} primary icon={Link2} onPress={() => void connect("read")}>
-                Connect Google
-              </Button>
-              <Button busy={busy} onPress={() => void connect("write")}>
+              <Button busy={busy === "google"} onPress={() => void connectGoogle("write")}>
                 Enable sending & editing
               </Button>
-              {connected && (
-                <Button busy={busy} danger onPress={() => void disconnect()}>
-                  Disconnect Google
-                </Button>
-              )}
-              <SettingsLine
-                label="Environment"
-                value={w.mode === "sample" ? "Local · example data" : "Live workspace"}
-              />
-              <SettingsLine
-                label="Assistant"
-                value={
-                  w.runtime.provider === "sample"
-                    ? "Guided workflows"
-                    : w.runtime.configured
-                      ? "Model connected"
-                      : "Model not configured"
-                }
-              />
-              <SettingsLine
-                label="Rich Threads"
-                value={w.runtime.richThreads ? "CopilotKit Intelligence" : "Not connected"}
-              />
-              <Button
-                small
-                icon={ArrowDownToLine}
-                onPress={() => void refresh().catch((e) => setError(String(e)))}
-              >
-                Refresh connections
+              <Button busy={busy === "google"} danger onPress={() => void disconnectGoogle()}>
+                Disconnect Google
               </Button>
             </View>
-          ) : selected === "plaid" ? (
+          ) : (
             <View style={{ gap: 14 }}>
               <Text style={s.muted}>
-                Link a bank through Plaid to see balances and recent transactions in Finance and let
-                Noa answer questions about them. Access is read-only: Noa can never move money.
+                Link a bank through Plaid to see balances and recent transactions in Finance. Access
+                is read-only: Noa can never move money.
               </Text>
               <ErrorNotice error={error} />
               <Button
-                busy={busy}
+                busy={busy === "plaid"}
                 primary
                 icon={Link2}
                 onPress={() =>
@@ -1435,19 +1454,22 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
               >
                 {plaid?.status === "connected" ? "Link a different bank" : "Connect bank"}
               </Button>
-              <Button busy={busy} onPress={() => void plaidAction("complete", "Bank connected.")}>
+              <Button
+                busy={busy === "plaid"}
+                onPress={() => void plaidAction("complete", "Bank connected.")}
+              >
                 I've finished linking
               </Button>
               {plaid?.status === "connected" && (
                 <>
                   <Button
-                    busy={busy}
+                    busy={busy === "plaid"}
                     onPress={() => void plaidAction("sync", "Bank data refreshed.")}
                   >
                     Refresh balances & transactions
                   </Button>
                   <Button
-                    busy={busy}
+                    busy={busy === "plaid"}
                     danger
                     onPress={() => void plaidAction("disconnect", "Bank disconnected.")}
                   >
@@ -1456,33 +1478,9 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                 </>
               )}
             </View>
-          ) : (
-            <View style={{ gap: 14 }}>
-              <Text style={s.text}>
-                The OpenBot adapter is available in this open-source project. A live OpenBot backend
-                has not been configured.
-              </Text>
-              <Text style={s.muted}>
-                Your current computer uses OpenMuse’s persistent Chromium worker. OpenBot
-                integration will expand the execution backend while keeping this interface.
-              </Text>
-            </View>
           )}
         </Sheet>
       )}
-    </View>
-  );
-}
-function SettingsLine({ label, value }: { label: string; value: string }) {
-  return (
-    <View
-      style={[
-        s.between,
-        { gap: 15, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.line },
-      ]}
-    >
-      <Text style={s.muted}>{label}</Text>
-      <Text style={[s.text, { fontSize: 12, flexShrink: 1, textAlign: "right" }]}>{value}</Text>
     </View>
   );
 }
