@@ -769,7 +769,7 @@ export function ChatScreen({
         </Button>
       )}
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        enabled={false}
         style={keyboardPadding > 0 ? { paddingBottom: keyboardPadding } : undefined}
       >
         <ErrorNotice error={saveError} />

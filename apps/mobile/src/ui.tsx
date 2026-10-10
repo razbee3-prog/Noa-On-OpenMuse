@@ -1,9 +1,13 @@
 import { ArrowUpRight, Check, ChevronRight, type LucideIcon, X } from "lucide-react-native";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -243,25 +247,133 @@ export function ErrorNotice({ error }: { error?: string }) {
     </View>
   ) : null;
 }
+/** True while the on-screen keyboard is up (fires before the animation on iOS). */
+export function useKeyboardVisible() {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const ios = Platform.OS === "ios";
+    const show = Keyboard.addListener(ios ? "keyboardWillShow" : "keyboardDidShow", () =>
+      setVisible(true),
+    );
+    const hide = Keyboard.addListener(ios ? "keyboardWillHide" : "keyboardDidHide", () =>
+      setVisible(false),
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return visible;
+}
+/** A left-hand drawer that slides over the current screen. */
+function SideSheet({
+  title,
+  subtitle,
+  children,
+  onClose,
+}: {
+  title: string;
+  subtitle?: string;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const panelWidth = Math.min(Math.round(width * 0.86), 380);
+  const slide = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(slide, { toValue: 1, duration: 240, useNativeDriver: true }).start();
+  }, [slide]);
+  const close = () =>
+    Animated.timing(slide, { toValue: 0, duration: 180, useNativeDriver: true }).start(() =>
+      onClose(),
+    );
+  return (
+    <Modal transparent animationType="none" visible onRequestClose={close}>
+      <Animated.View style={{ flex: 1, flexDirection: "row", opacity: slide }}>
+        <Animated.View
+          accessibilityViewIsModal
+          style={{
+            width: panelWidth,
+            height: "100%",
+            backgroundColor: colors.canvas,
+            paddingTop: insets.top,
+            paddingBottom: Math.max(insets.bottom, 12),
+            borderTopRightRadius: 26,
+            borderBottomRightRadius: 26,
+            shadowColor: "#0B1215",
+            shadowOpacity: 0.18,
+            shadowRadius: 24,
+            shadowOffset: { width: 6, height: 0 },
+            transform: [
+              {
+                translateX: slide.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-panelWidth, 0],
+                }),
+              },
+            ],
+          }}
+        >
+          <View style={[s.between, { paddingHorizontal: 20, paddingVertical: 16 }]}>
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={s.title}>{title}</Text>
+              {!!subtitle && <Text style={s.muted}>{subtitle}</Text>}
+            </View>
+            <IconButton icon={X} label="Close menu" onPress={close} />
+          </View>
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+          >
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}
+            >
+              {children}
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </Animated.View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close menu"
+          onPress={close}
+          style={{ flex: 1, backgroundColor: "rgba(11,18,21,0.32)" }}
+        />
+      </Animated.View>
+    </Modal>
+  );
+}
 export function Sheet({
   title,
   subtitle,
   children,
   onClose,
   wide,
+  side,
 }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  side?: boolean;
 }) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const compact = width < 600;
+  if (side)
+    return (
+      <SideSheet title={title} subtitle={subtitle} onClose={onClose}>
+        {children}
+      </SideSheet>
+    );
   return (
     <Modal transparent animationType={compact ? "slide" : "fade"} visible onRequestClose={onClose}>
-      <View style={[s.modalShade, compact && { padding: 0, justifyContent: "flex-end" }]}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={[s.modalShade, compact && { padding: 0, justifyContent: "flex-end" }]}
+      >
         <View
           accessibilityViewIsModal
           style={[
@@ -306,7 +418,7 @@ export function Sheet({
             {children}
           </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

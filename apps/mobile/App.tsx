@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -50,7 +51,17 @@ import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/sc
 import { onSignedOut } from "./src/session-events";
 import { clearSession, loadSession, saveSession } from "./src/session-store";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
-import { Button, Card, colors, ErrorNotice, Field, IconButton, Mascot, s } from "./src/ui";
+import {
+  Button,
+  Card,
+  colors,
+  ErrorNotice,
+  Field,
+  IconButton,
+  Mascot,
+  s,
+  useKeyboardVisible,
+} from "./src/ui";
 import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
 
 const nav: { id: Section; label: string; icon: LucideIcon }[] = [
@@ -341,6 +352,7 @@ function WorkspaceShell({
     enabled: richThreads,
   } = useMuseThread();
   const [threadsOpen, setThreadsOpen] = useState(false);
+  const keyboardVisible = useKeyboardVisible();
   const { width } = useWindowDimensions();
   const desktop = width >= 900;
   const pending =
@@ -382,7 +394,10 @@ function WorkspaceShell({
     <>
       <WorkspaceTools />
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "bottom"]}>
-        <View style={{ flex: 1, width: "100%", maxWidth: 760, alignSelf: "center" }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={{ flex: 1, width: "100%", maxWidth: 760, alignSelf: "center" }}
+        >
           <View
             style={{
               height: desktop ? 146 : 122,
@@ -513,6 +528,7 @@ function WorkspaceShell({
           </View>
           <View
             style={{
+              display: keyboardVisible && !desktop ? "none" : "flex",
               paddingHorizontal: 22,
               paddingTop: 10,
               paddingBottom: desktop ? 22 : 7,
@@ -525,15 +541,13 @@ function WorkspaceShell({
                 width: "100%",
                 maxWidth: 370,
                 padding: 5,
-                backgroundColor: "#FFF",
+                backgroundColor: colors.text,
                 borderRadius: 40,
-                shadowColor: "#132631",
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.07,
-                shadowRadius: 18,
-                elevation: 3,
-                borderWidth: 1,
-                borderColor: "#F8F8F8",
+                shadowColor: "#0B1215",
+                shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: 0.22,
+                shadowRadius: 20,
+                elevation: 8,
               }}
             >
               {nav.map((item) => {
@@ -550,17 +564,21 @@ function WorkspaceShell({
                       height: 47,
                       alignItems: "center",
                       justifyContent: "center",
-                      backgroundColor: active ? "#F0F1F2" : "transparent",
+                      backgroundColor: active ? "rgba(255,255,255,0.16)" : "transparent",
                       borderRadius: 28,
                     }}
                   >
-                    <item.icon size={23} strokeWidth={1.8} color={colors.text} />
+                    <item.icon
+                      size={23}
+                      strokeWidth={active ? 2.1 : 1.8}
+                      color={active ? "#FFFFFF" : "rgba(255,255,255,0.62)"}
+                    />
                   </Pressable>
                 );
               })}
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
         {!!toast && (
           <View
             pointerEvents="box-none"

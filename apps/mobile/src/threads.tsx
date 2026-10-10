@@ -8,9 +8,11 @@ import {
   Plus,
   RefreshCw,
   Settings2,
+  Sparkles,
 } from "lucide-react-native";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { requestAgentSettings } from "./agent-ui";
 import { Button, colors, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
@@ -132,6 +134,7 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
   }
   return (
     <Sheet
+      side
       title="Noa on OpenMuse"
       subtitle={workspace.mode === "sample" ? "Your workspace" : workspace.profile.name}
       onClose={onClose}
@@ -318,6 +321,14 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
         />
         <LinkRow icon={CalendarDays} title="Calendar" onPress={() => go("calendar")} />
         <LinkRow icon={FileText} title="Files" onPress={() => go("files")} />
+        <LinkRow
+          icon={Sparkles}
+          title="Agent name & personality"
+          onPress={() => {
+            requestAgentSettings();
+            go("apps");
+          }}
+        />
         <LinkRow icon={Settings2} title="Apps & settings" onPress={() => go("apps")} />
         <Button small icon={RefreshCw} onPress={() => void mutate(refresh)}>
           Refresh workspace
