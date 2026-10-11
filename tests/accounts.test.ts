@@ -64,7 +64,7 @@ const appleToken = (sub: string, audience = AUDIENCE) =>
     .setExpirationTime("10m")
     .sign(signKey);
 
-async function server(owner?: string) {
+async function server(owner?: string, inviteRequired = true) {
   const docker = fixture({ command: async () => ok("ran"), owner });
   const created = await createApp(
     db,
@@ -75,6 +75,7 @@ async function server(owner?: string) {
       workerToken: "w".repeat(32),
       accessKey: "admin-access-key-for-tests-only",
       trustProxy: true,
+      inviteRequired,
     },
     { docker: docker.runner, appleVerifier: verify },
   );
@@ -322,4 +323,14 @@ test("the agent computer shows when Noa needs you, only to that account", async 
   });
   assert.equal((await read(json(alice))).site, "LinkedIn");
   assert.equal(await read(json(bob)), null);
+});
+
+test("with INVITE_REQUIRED off, Apple sign-in creates an account without a code", async () => {
+  const { app } = await server(undefined, false);
+  const health = await (await app.request("/api/health")).json();
+  assert.equal(health.inviteRequired, false);
+  const first = await appleSignIn(app, { identityToken: await appleToken("apple-open") });
+  assert.equal(first.status, 200);
+  const again = await appleSignIn(app, { identityToken: await appleToken("apple-open") });
+  assert.equal(again.status, 200);
 });

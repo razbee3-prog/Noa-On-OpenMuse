@@ -43,6 +43,7 @@ import {
   MuseApi,
   type Session,
   sessionStillValid,
+  useInviteRequired,
 } from "./src/api";
 import { ChatScreen, WorkspaceTools } from "./src/chat";
 import { ComputerEntry } from "./src/computer";
@@ -94,6 +95,7 @@ export default function App() {
   const [accessKey, setAccessKey] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [needsInvite, setNeedsInvite] = useState(false);
+  const inviteRequired = useInviteRequired();
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
   // The iPhone app signs in only with Apple; the web app keeps the admin access key.
@@ -212,9 +214,11 @@ export default function App() {
                       style={{ width: "100%", height: 50 }}
                       onPress={() => void signInWithApple()}
                     />
-                    <Text style={[s.small, { marginTop: 15 }]}>
-                      New here? Sign in with Apple, then enter the invite code you were sent.
-                    </Text>
+                    {inviteRequired ? (
+                      <Text style={[s.small, { marginTop: 15 }]}>
+                        New here? Sign in with Apple, then enter the invite code you were sent.
+                      </Text>
+                    ) : null}
                   </>
                 ) : (
                   <>

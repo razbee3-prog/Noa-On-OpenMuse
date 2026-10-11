@@ -60,16 +60,29 @@ export class Accounts {
     private readonly db: Store,
     config: Config,
     private readonly verifyApple: AppleVerifier = appleVerifier(config.appleAudiences ?? []),
-  ) {}
+  ) {
+    this.inviteRequired = config.inviteRequired === true;
+  }
+  readonly inviteRequired: boolean;
   get(owner: string) {
     return this.db.get<Account>("system", "accounts", owner);
   }
-  /** Verifies Apple's identity token and returns the owner, creating the account only with a valid invite. */
+  /** Verifies Apple's identity token and returns the owner, creating the account (with a valid invite when INVITE_REQUIRED is on). */
   async signInWithApple(input: { identityToken: string; inviteCode?: string; fullName?: string }) {
     const identity = await this.verifyApple(input.identityToken);
     const owner = appleOwnerId(identity.sub);
     const existing = await this.get(owner);
     if (existing) return existing;
+    if (!this.inviteRequired) {
+      const account: Account = {
+        id: owner,
+        provider: "apple",
+        displayName: input.fullName?.trim().slice(0, 80) || "Noa user",
+        email: identity.email,
+        createdAt: new Date().toISOString(),
+      };
+      return (await this.db.insertIfAbsent("system", "accounts", account)) ?? account;
+    }
     if (!input.inviteCode?.trim())
       throw new AppError("An invite code is required to create an account.", 403);
     const inviteId = sha256(normalizeInvite(input.inviteCode));

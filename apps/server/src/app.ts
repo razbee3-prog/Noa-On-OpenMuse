@@ -146,6 +146,7 @@ export async function createApp(
       ok: true,
       mode: config.mode,
       agentConfigured: agentConfigured(config),
+      inviteRequired: accounts.inviteRequired,
       browserConfigured: Boolean(config.workerUrl && config.workerToken),
     }),
   );

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Linking, Platform, Share, Text, View } from "react-native";
-import { API_URL } from "./api";
+import { API_URL, useInviteRequired } from "./api";
 import { signOutLocally } from "./session-store";
 import { Button, Card, ErrorNotice, Field, s } from "./ui";
 import { useWorkspace } from "./workspace";
@@ -14,6 +14,7 @@ interface AccountInfo {
 
 /** Display name, privacy policy, sign out, account deletion and (for the admin) one-time invite codes. */
 export function AccountCard() {
+  const inviteRequired = useInviteRequired();
   const { api, refresh, notify } = useWorkspace();
   const [account, setAccount] = useState<AccountInfo>();
   const [name, setName] = useState("");
@@ -62,7 +63,7 @@ export function AccountCard() {
       >
         Save name
       </Button>
-      {account.role === "admin" ? (
+      {account.role === "admin" && inviteRequired ? (
         <View style={{ gap: 8 }}>
           <Button
             busy={busy}
