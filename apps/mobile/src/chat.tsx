@@ -40,6 +40,7 @@ import { confirmedJevSelection, displayJevUserMessage, latestJevPanelId } from "
 import { JevInteractionContext, JevToolCard } from "./jev-tool-card";
 import { MailToolCard } from "./mail-tool-card";
 import { SearchToolCard } from "./search-tool-card";
+import { SignInToolCard } from "./sign-in-card";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
 import { Button, Card, CheckRow, colors, ErrorNotice, s } from "./ui";
@@ -123,6 +124,14 @@ export function WorkspaceTools() {
     parameters: displayParameters,
     render: ({ toolCallId, result, status }) => (
       <DesktopToolCard toolCallId={toolCallId} result={result} loading={status !== "complete"} />
+    ),
+  });
+  useRenderTool({
+    name: "request_sign_in",
+    description: "Ask the person to sign in to a site in the agent's browser",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <SignInToolCard result={result} loading={status !== "complete"} />
     ),
   });
   useRenderTool({

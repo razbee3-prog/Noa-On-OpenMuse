@@ -65,13 +65,15 @@ export class ActionService {
     const title =
       input.kind === "email.send" || input.kind === "outlook.email.send"
         ? `Send “${input.data.subject}”`
-        : input.kind === "slack.message.send"
-          ? `Post to Slack ${input.data.channelName ?? input.data.channel}`
-          : input.kind === "outlook.calendar.create"
-            ? `Create ${input.data.title} in Outlook`
-            : input.kind === "calendar.delete"
-              ? `Delete ${input.data.title}`
-              : `${input.kind === "calendar.create" ? "Create" : "Update"} ${input.data.title}`;
+        : input.kind === "browser.action"
+          ? `${input.data.site}: ${input.data.summary}`
+          : input.kind === "slack.message.send"
+            ? `Post to Slack ${input.data.channelName ?? input.data.channel}`
+            : input.kind === "outlook.calendar.create"
+              ? `Create ${input.data.title} in Outlook`
+              : input.kind === "calendar.delete"
+                ? `Delete ${input.data.title}`
+                : `${input.kind === "calendar.create" ? "Create" : "Update"} ${input.data.title}`;
     const createdAt = new Date(this.now()).toISOString();
     const proposal: ActionProposal = {
       id,

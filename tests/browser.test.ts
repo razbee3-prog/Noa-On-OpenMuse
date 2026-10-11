@@ -9,6 +9,8 @@ import test from "node:test";
 import { createApp } from "../apps/server/src/app.ts";
 import { Auth } from "../apps/server/src/auth.ts";
 import { BrowserService } from "../apps/server/src/browser.ts";
+import { browserAgentTools } from "../apps/server/src/browser-tools.ts";
+import { browserFallbackInstructions } from "../apps/server/src/connector-tools.ts";
 import { Files } from "../apps/server/src/files.ts";
 import { capturePdfDownload, readDownloadFailures } from "../apps/worker/src/downloads.ts";
 import { isPublicIp, validatePublicUrl } from "../apps/worker/src/network.ts";
@@ -186,24 +188,20 @@ test("chat browser reads reuse a persisted owned profile across turns and servic
     currentUrl = String(body.url);
     return { data: { ...savedSession, id: body.id, url: currentUrl } };
   });
-  const first = await service.observeForThread("owner", "chat-thread", "https://example.org/first");
+  const first = await service.observeForOwner("owner", "https://example.org/first");
   assert.equal(first.text.length, 30_000);
   assert.equal(first.truncated, true);
   const auth = new Auth(db, config, "test-signing-key");
   const restarted = new BrowserService(db, config, auth, new Files(db, config, auth));
   for (const status of ["active", "closed", "error", "idle"] as const) {
     await db.put("owner", "browsers", { ...(await service.get("owner", first.sessionId)), status });
-    const next = await restarted.observeForThread(
-      "owner",
-      "chat-thread",
-      `https://example.org/${status}`,
-    );
+    const next = await restarted.observeForOwner("owner", `https://example.org/${status}`);
     assert.equal(next.sessionId, first.sessionId);
     assert.equal(next.url, `https://example.org/${status}`);
   }
   assert.equal((await db.list("owner", "browsers")).length, 1);
   assert.equal(calls.filter((call) => call.path === "/sessions").length, 5);
-  const otherOwner = await restarted.observeForThread("stranger", "chat-thread", savedSession.url);
+  const otherOwner = await restarted.observeForOwner("stranger", savedSession.url);
   assert.notEqual(otherOwner.sessionId, first.sessionId);
   await assert.rejects(restarted.get("stranger", first.sessionId), { status: 404 });
 });
@@ -226,13 +224,10 @@ test("chat browser retries failed navigation using the reserved profile", async 
       ? { status: 502, data: { error: { message: "Page unavailable" } } }
       : { data: { ...savedSession, id: body.id } };
   });
-  await assert.rejects(
-    service.observeForThread("owner", "chat-thread", savedSession.url),
-    /Page unavailable/,
-  );
+  await assert.rejects(service.observeForOwner("owner", savedSession.url), /Page unavailable/);
   assert.equal((await db.list<BrowserSession>("owner", "browsers"))[0]?.status, "error");
   failing = false;
-  const result = await service.observeForThread("owner", "chat-thread", savedSession.url);
+  const result = await service.observeForOwner("owner", savedSession.url);
   assert.deepEqual(ids, [result.sessionId, result.sessionId]);
   assert.equal(result.text, "Actual contents");
   assert.equal(result.truncated, true);
@@ -247,9 +242,7 @@ test("concurrent chat reads keep each navigation paired with its page read", asy
     return { data: { ...savedSession, id: body.id, url: currentUrl } };
   });
   const urls = ["https://example.org/one", "https://example.org/two"];
-  const results = await Promise.all(
-    urls.map((url) => service.observeForThread("owner", "chat-thread", url)),
-  );
+  const results = await Promise.all(urls.map((url) => service.observeForOwner("owner", url)));
   assert.deepEqual(
     results.map((result) => result.text),
     urls,
@@ -266,15 +259,13 @@ test("cancelled chat browser requests do not start navigation or a follow-up rea
     controller.abort();
     return { data: { ...savedSession, id: body.id } };
   });
-  await assert.rejects(
-    service.observeForThread("owner", "chat-thread", savedSession.url, controller.signal),
-    { name: "AbortError" },
-  );
+  await assert.rejects(service.observeForOwner("owner", savedSession.url, controller.signal), {
+    name: "AbortError",
+  });
   assert.deepEqual(calls, ["/sessions"]);
-  await assert.rejects(
-    service.observeForThread("owner", "other-thread", savedSession.url, controller.signal),
-    { name: "AbortError" },
-  );
+  await assert.rejects(service.observeForOwner("owner", savedSession.url, controller.signal), {
+    name: "AbortError",
+  });
   assert.deepEqual(calls, ["/sessions"]);
   assert.equal((await db.list("owner", "browsers")).length, 1);
 });
@@ -739,4 +730,114 @@ test("the workspace reports the browser offline while its worker's health check 
       up ? "connected" : "unavailable",
     );
   }
+});
+
+type RunnableTool = { name: string; execute: (args: unknown) => Promise<unknown> };
+const linkedInPage = {
+  url: "https://www.linkedin.com/messaging/",
+  title: "Messaging | LinkedIn",
+  text: "Dana Lee: Are we still on for lunch Thursday?",
+  truncated: false,
+  controls: ["button: Send"],
+  signInRequired: false,
+  blocked: false,
+};
+
+test("one browser profile per owner is shared across chats and tasks and hidden from other owners", async (t) => {
+  const { service } = await browserFixture(t, (path, body) =>
+    path.endsWith("/read")
+      ? { data: { url: savedSession.url, title: "Page", text: "Text", truncated: false } }
+      : { data: { ...savedSession, id: body.id } },
+  );
+  const firstChat = await service.observeForOwner("owner", savedSession.url);
+  const laterTask = await service.observeForOwner("owner", savedSession.url);
+  assert.equal(laterTask.sessionId, firstChat.sessionId);
+  assert.equal(await service.ownerSession("owner"), firstChat.sessionId);
+  const stranger = await service.ownerSession("stranger");
+  assert.notEqual(stranger, firstChat.sessionId);
+  await assert.rejects(service.get("stranger", firstChat.sessionId), { status: 404 });
+});
+
+test("browser tools hand off sign-in, refuse unreviewed sends and run approved steps only on the approved page", async (t) => {
+  const acts: Record<string, unknown>[] = [];
+  let page = linkedInPage;
+  const { service } = await browserFixture(t, (path, body) => {
+    if (path.endsWith("/act")) {
+      acts.push(body);
+      if (body.type === "click" && body.target === "Send" && body.reviewed !== true)
+        return {
+          status: 409,
+          data: {
+            error: {
+              message:
+                "“Send” could send, submit or change something. Prepare a review card first.",
+            },
+          },
+        };
+      return { data: page };
+    }
+    return { data: { ...savedSession, id: body.id, url: String(body.url ?? savedSession.url) } };
+  });
+  const proposals: unknown[] = [];
+  const signIns: unknown[] = [];
+  const tools = browserAgentTools(service, "owner", {
+    requestSignIn: async (request) => {
+      signIns.push(request);
+      return { kind: "sign_in", ...request };
+    },
+    propose: async (draft) => {
+      proposals.push(draft);
+      return { status: "awaiting_review" };
+    },
+  }) as unknown as RunnableTool[];
+  const run = (name: string, args: unknown = {}) =>
+    tools.find((tool) => tool.name === name)?.execute(args) as Promise<Record<string, unknown>>;
+
+  page = { ...linkedInPage, url: "https://www.linkedin.com/login", signInRequired: true };
+  const login = await run("browser_open", { url: "https://www.linkedin.com/messaging/" });
+  assert.equal(login.signInRequired, true);
+  assert.match(String(login.next), /request_sign_in/);
+  const card = await run("request_sign_in", {
+    site: "LinkedIn",
+    url: "https://www.linkedin.com/login",
+    reason: "To read your LinkedIn messages.",
+  });
+  assert.equal(card.kind, "sign_in");
+  assert.match(String(card.consoleUrl), /\/api\/browsers\/[0-9a-f-]+\/console/);
+  assert.equal(signIns.length, 1);
+
+  page = linkedInPage;
+  const inbox = await run("browser_read");
+  assert.match(String(inbox.text), /Dana Lee/);
+  const refused = await run("browser_click", { target: "Send" });
+  assert.match(String(refused.error), /review card/);
+  assert.match(String(refused.next), /propose_browser_action/);
+  assert.equal(acts.filter((act) => act.reviewed === true).length, 0);
+
+  const draft = {
+    site: "LinkedIn",
+    url: linkedInPage.url,
+    action: "click" as const,
+    target: "Send",
+    summary: "Send “See you Thursday” to Dana Lee",
+  };
+  await run("propose_browser_action", draft);
+  assert.deepEqual(proposals, [draft]);
+  assert.match(await service.runReviewed("owner", draft), /LinkedIn/);
+  assert.equal(acts.at(-1)?.reviewed, true);
+
+  page = { ...linkedInPage, url: "https://www.linkedin.com/settings/" };
+  await assert.rejects(service.runReviewed("owner", draft), /different page/);
+  assert.equal(acts.filter((act) => act.reviewed === true).length, 1);
+});
+
+test("chat and task prompts follow the source order and never substitute another source", () => {
+  assert.match(browserFallbackInstructions, /Never silently substitute a different source/);
+  assert.match(browserFallbackInstructions, /LinkedIn\) from another \(for example Gmail/);
+  assert.match(
+    browserFallbackInstructions,
+    /offer to connect it under Apps, and in the same message offer to use your browser/,
+  );
+  assert.match(browserFallbackInstructions, /Never end with 'I don't have a connector for that'/);
+  assert.match(browserFallbackInstructions, /CAPTCHA/);
 });

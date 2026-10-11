@@ -50,6 +50,7 @@ export async function createApp(
     google = new GoogleAuth(db, config),
     workspace = new WorkspaceService(db, config, files, google);
   const connectors = new ConnectorService(config, options.nangoClient);
+  const browser = new BrowserService(db, config, auth, files);
   const actions = new ActionService(db, {
     execute: (owner, input, connectionId, targetVersion) => {
       if (input.kind === "outlook.email.send") return connectors.sendOutlookMail(owner, input.data);
@@ -57,6 +58,7 @@ export async function createApp(
         return connectors.createOutlookEvent(owner, input.data);
       if (input.kind === "slack.message.send")
         return connectors.sendSlackMessage(owner, input.data);
+      if (input.kind === "browser.action") return browser.runReviewed(owner, input.data);
       return workspace.execute(owner, input, connectionId, targetVersion);
     },
     prepare: async (owner, input, connectionId) =>
@@ -65,18 +67,19 @@ export async function createApp(
         : { input },
     connected: async (owner, kind) => {
       const provider = proposalProvider(kind);
+      if (provider === "browser") return true;
       return provider === "google"
         ? workspace.connected(owner)
         : Boolean(await connectors.account(owner, provider));
     },
-    connection: (owner, kind) => {
+    connection: async (owner, kind) => {
       const provider = proposalProvider(kind);
+      if (provider === "browser") return { id: `browser:${owner}`, account: "Noa's browser" };
       return provider === "google"
         ? workspace.connection(owner)
         : connectors.account(owner, provider);
     },
   });
-  const browser = new BrowserService(db, config, auth, files);
   const computer = new ComputerService(db, config, options.docker);
   const plaid = new PlaidService(db, config, options.plaidClient);
   const agent = new AgentService(

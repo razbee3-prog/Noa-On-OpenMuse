@@ -401,6 +401,7 @@ export class WorkspaceService {
       input.kind === "outlook.email.send" ||
       input.kind === "outlook.calendar.create" ||
       input.kind === "slack.message.send" ||
+      input.kind === "browser.action" ||
       this.config.mode === "sample"
     )
       return { input };
@@ -479,7 +480,8 @@ export class WorkspaceService {
     if (
       input.kind === "outlook.email.send" ||
       input.kind === "outlook.calendar.create" ||
-      input.kind === "slack.message.send"
+      input.kind === "slack.message.send" ||
+      input.kind === "browser.action"
     )
       throw new AppError("Connector actions run through the connector service", 500);
     if (input.kind === "calendar.delete") {
