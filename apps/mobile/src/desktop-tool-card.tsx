@@ -90,7 +90,7 @@ export function DesktopToolCard({
   }
   return (
     <Card
-      style={{ padding: 13, backgroundColor: "#EEEEF0", gap: 12, width: "100%", maxWidth: 640 }}
+      style={{ padding: 13, backgroundColor: colors.line, gap: 12, width: "100%", maxWidth: 640 }}
     >
       <View style={[s.row, { gap: 10 }]}>
         <View style={[s.iconBox, { width: 36, height: 36, borderRadius: 10 }]}>
@@ -110,7 +110,7 @@ export function DesktopToolCard({
       </View>
       <ErrorNotice error={value?.error || error} />
       {latest && snapshot && !running ? (
-        <View style={{ backgroundColor: "#FAFAFB", borderRadius: 12, padding: 16, gap: 10 }}>
+        <View style={{ backgroundColor: colors.canvas, borderRadius: 12, padding: 16, gap: 10 }}>
           <Text style={s.small}>
             The computer is offline. Start it to see the desktop; apps that were open are closed.
           </Text>

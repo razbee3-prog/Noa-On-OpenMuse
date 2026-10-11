@@ -133,7 +133,7 @@ export class AgentService {
   async ensure(owner: string) {
     await this.db.insertIfAbsent(owner, "agent-settings", {
       id: "identity",
-      name: "Noa on OpenMuse",
+      name: "Noa",
       tone: "warm",
     });
   }
@@ -159,7 +159,7 @@ export class AgentService {
       memories,
       artifacts,
       notifications,
-      identity: identity ?? { name: "Noa on OpenMuse", tone: "warm" },
+      identity: identity ?? { name: "Noa", tone: "warm" },
       worker: {
         running:
           this.worker.running ||
@@ -620,6 +620,46 @@ export class AgentService {
         createdAt: date(),
       } satisfies Idea);
     }
+    const starters = [
+      {
+        key: "money",
+        title: "Find subscriptions you're not using",
+        reason:
+          "Recurring charges add up quietly. I can list them and flag the ones worth a second look.",
+        prompt: "Find subscriptions I'm not using",
+      },
+      {
+        key: "career",
+        title: "Check whether you're paid fairly",
+        reason: "Knowing the going rate for your role makes the next pay conversation easier.",
+        prompt: "Am I paid fairly for my role?",
+      },
+      {
+        key: "taxes",
+        title: "Gather your tax documents",
+        reason: "A checklist now saves a scramble when filing season arrives.",
+        prompt: "Gather my tax documents",
+      },
+    ];
+    for (const starter of starters)
+      await this.db.insertIfAbsent(owner, "ideas", {
+        id: hash(`starter:${starter.key}`),
+        title: starter.title,
+        reason: starter.reason,
+        evidence: [
+          {
+            id: `starter-${starter.key}`,
+            kind: "user",
+            title: "Suggested starting point",
+            excerpt: starter.reason,
+          },
+        ],
+        prompt: starter.prompt,
+        kind: "agent",
+        input: {},
+        status: "new",
+        createdAt: date(),
+      } satisfies Idea);
     for (const goal of await this.db.listByStatus<Goal>(owner, "goals", "active"))
       if (!goal.milestones.length) {
         const id = hash(`goal:${goal.id}:${goal.description}`);
@@ -867,8 +907,31 @@ export class AgentService {
       }
     }
     if (task.kind === "finance") {
-      await context.event("step", "Analyzing the imported transactions");
-      const csv = z.string().parse(task.input.csv);
+      const fromBank = task.input.source === "bank";
+      await context.event(
+        "step",
+        fromBank
+          ? "Analyzing your connected bank transactions"
+          : "Analyzing the imported transactions",
+      );
+      const bank = fromBank
+        ? await this.plaid.transactions(owner, { days: 90, limit: 500 })
+        : undefined;
+      if (bank && !bank.transactions.length)
+        throw new Error(
+          "Your connected bank has no transactions from the last 90 days yet. Sync it in Apps, or paste a spreadsheet instead.",
+        );
+      const cell = (value: string) => `"${value.replace(/"/g, '""')}"`;
+      const csv = bank
+        ? [
+            "date,description,amount,category",
+            ...bank.transactions.map((row) =>
+              [row.date, cell(row.description), row.amount, cell(row.category || "Other")].join(
+                ",",
+              ),
+            ),
+          ].join("\n")
+        : z.string().parse(task.input.csv);
       const data = analyzeSpending(csv);
       const artifact = await this.artifact(
         owner,
@@ -884,7 +947,9 @@ export class AgentService {
           {
             id: task.id,
             kind: "user",
-            title: "Your transaction CSV",
+            title: bank
+              ? `${bank.institution ?? "Connected bank"} transactions`
+              : "Your transaction CSV",
             excerpt: `${data.count} rows; ${data.period.from} through ${data.period.to}`,
           },
         ],

@@ -57,6 +57,7 @@ import {
   SectionHeading,
   Sheet,
   s,
+  statusLabel,
   timeLabel,
 } from "./ui";
 import { useWorkspace } from "./workspace";
@@ -82,7 +83,7 @@ export function TodayScreen() {
       <View
         style={[
           {
-            backgroundColor: "#E8F2F8",
+            backgroundColor: colors.skySoft,
             borderRadius: 24,
             padding: 32,
             minHeight: 228,
@@ -107,7 +108,7 @@ export function TodayScreen() {
           >
             Your day, with a little{"\n"}more room to breathe.
           </Text>
-          <Text style={[s.muted, { maxWidth: 420, color: "#617680" }]}>
+          <Text style={[s.muted, { maxWidth: 420, color: colors.muted }]}>
             {events.length ? `${events.length} things on your calendar` : "Your calendar has room"}
             {unread.length ? `, ${unread.length} unread emails` : ""}.{"\n"}Let’s make space for
             what matters.
@@ -129,7 +130,7 @@ export function TodayScreen() {
                 width: 190,
                 height: 190,
                 borderRadius: 100,
-                backgroundColor: "#DAEAF2",
+                backgroundColor: colors.skyMid,
               }}
             />
             <View
@@ -139,7 +140,7 @@ export function TodayScreen() {
                 height: 145,
                 borderRadius: 80,
                 borderWidth: 1,
-                borderColor: "#C8DBE6",
+                borderColor: colors.skyLine,
               }}
             />
             <Mascot size={94} />
@@ -152,13 +153,13 @@ export function TodayScreen() {
                   left: -19,
                   padding: 11,
                   gap: 7,
-                  backgroundColor: "#FFF",
+                  backgroundColor: colors.card,
                   borderRadius: 13,
                   transform: [{ rotate: "-7deg" }],
                 },
               ]}
             >
-              <Check size={14} color="#739174" />
+              <Check size={14} color={colors.sage} />
               <Text style={s.small}>A lighter day</Text>
             </View>
             <View
@@ -170,7 +171,7 @@ export function TodayScreen() {
                   right: -8,
                   padding: 12,
                   gap: 8,
-                  backgroundColor: "#FFF",
+                  backgroundColor: colors.card,
                   borderRadius: 13,
                   transform: [{ rotate: "5deg" }],
                 },
@@ -304,7 +305,7 @@ export function TodayScreen() {
                 </View>
                 {m.unread && (
                   <View
-                    style={{ width: 5, height: 5, borderRadius: 4, backgroundColor: "#78ABD0" }}
+                    style={{ width: 5, height: 5, borderRadius: 4, backgroundColor: colors.skyDot }}
                   />
                 )}
               </Pressable>
@@ -319,7 +320,7 @@ export function TodayScreen() {
         </Card>
       </View>
       <View style={{ flexDirection: wide ? "row" : "column", gap: 22 }}>
-        <Card style={{ flex: 1, backgroundColor: "#F0F0E7" }}>
+        <Card style={{ flex: 1, backgroundColor: colors.sand }}>
           <SectionHeading title="A hand with the little things" />
           <Text style={[s.muted, { marginBottom: 15 }]}>
             Start with a thought. We’ll take it from there.
@@ -334,7 +335,7 @@ export function TodayScreen() {
               onPress={() => ask(prompt)}
               style={[
                 s.between,
-                { borderTopWidth: 1, borderTopColor: "#E1E2D9", paddingVertical: 13 },
+                { borderTopWidth: 1, borderTopColor: colors.sandLine, paddingVertical: 13 },
               ]}
             >
               <Text style={[s.text, { fontSize: 12 }]}>{prompt}</Text>
@@ -376,7 +377,7 @@ export function TodayScreen() {
               ))}
           {!pending.length && !w.activity.length && (
             <Text style={s.muted}>
-              Your workspace is ready. Things you do here will appear in your activity.
+              You’re all set. Things you do here will appear in your activity.
             </Text>
           )}
         </Card>
@@ -434,7 +435,7 @@ export function AgendaRow({
           width: 3,
           height: 42,
           borderRadius: 4,
-          backgroundColor: ["#BCDAEB", "#C7D6AB", "#D9CDEA"][index % 3],
+          backgroundColor: [colors.tileSky, colors.tileSage, colors.tileLilac][index % 3],
         }}
       />
       <View style={{ flex: 1, gap: 3 }}>
@@ -486,7 +487,7 @@ export function MailScreen() {
               gap: 9,
               flex: 1,
               minWidth: 200,
-              backgroundColor: "#FFF",
+              backgroundColor: colors.card,
               borderWidth: 1,
               borderColor: colors.line,
               borderRadius: 12,
@@ -570,7 +571,7 @@ export function MailScreen() {
               </View>
               {m.unread && (
                 <View
-                  style={{ width: 6, height: 6, borderRadius: 4, backgroundColor: "#83B5D3" }}
+                  style={{ width: 6, height: 6, borderRadius: 4, backgroundColor: colors.skyDot }}
                 />
               )}
             </Pressable>
@@ -764,7 +765,7 @@ export function CalendarScreen() {
                     backgroundColor: [...events, ...w.events].some(
                       (e) => e.calendarId === calendarId && eventDate(e) === key,
                     )
-                      ? "#8DB6CA"
+                      ? colors.skyDot
                       : "transparent",
                   }}
                 />
@@ -857,7 +858,9 @@ export function BrowserScreen() {
           <Globe2 size={22} color={colors.blueDark} />
           <View>
             <Text style={s.heading}>A place for your open tabs</Text>
-            <Text style={s.muted}>Browse in a private, persistent workspace session.</Text>
+            <Text style={s.muted}>
+              Browse in a private session that remembers where you left off.
+            </Text>
           </View>
         </View>
         <View style={[s.row, { gap: 10 }]}>
@@ -907,7 +910,9 @@ export function BrowserScreen() {
                     {b.url}
                   </Text>
                 </View>
-                <Chip tint={b.status === "active" ? colors.green : colors.canvas}>{b.status}</Chip>
+                <Chip tint={b.status === "active" ? colors.green : colors.canvas}>
+                  {statusLabel(b.status)}
+                </Chip>
                 <ArrowUpRight size={17} color={colors.muted} />
               </View>
               {!!b.previewUrl && (
@@ -928,7 +933,7 @@ export function BrowserScreen() {
           <Empty
             icon={Globe2}
             title="Start with a website"
-            detail="Open a session above to keep your browsing together. Live previews appear when the browser worker is configured."
+            detail="Open a session above to keep your browsing together. Live previews appear when browsing is available."
           />
         )}
       </Card>
@@ -999,7 +1004,7 @@ export function FilesScreen() {
               <View
                 style={{
                   height: 175,
-                  backgroundColor: "#EDEFEA",
+                  backgroundColor: colors.stone,
                   justifyContent: "center",
                   alignItems: "center",
                 }}
@@ -1009,11 +1014,11 @@ export function FilesScreen() {
                     width: 93,
                     height: 121,
                     borderRadius: 5,
-                    backgroundColor: "#FFF",
+                    backgroundColor: colors.card,
                     padding: 14,
                     transform: [{ rotate: "-4deg" }],
                     borderWidth: 1,
-                    borderColor: "#DDE3DD",
+                    borderColor: colors.stoneLine,
                   }}
                 >
                   <View style={[s.row, { gap: 5, marginBottom: 15 }]}>
@@ -1025,7 +1030,7 @@ export function FilesScreen() {
                       key={width}
                       style={{
                         height: 3,
-                        backgroundColor: i === 0 ? "#A4BED0" : "#E3E7E3",
+                        backgroundColor: i === 0 ? colors.stoneActive : colors.stoneSoft,
                         width: `${width}%`,
                         marginBottom: 7,
                         borderRadius: 3,
@@ -1074,11 +1079,11 @@ export function ActivityScreen() {
   return (
     <View style={{ gap: 20 }}>
       <View style={[s.row, { gap: 10 }]}>
-        <Button small primary={filter === "all"} onPress={() => setFilter("all")}>
+        <Button small selected={filter === "all"} onPress={() => setFilter("all")}>
           All activity
         </Button>
-        <Button small primary={filter === "review"} onPress={() => setFilter("review")}>
-          Needs review · {pending.length}
+        <Button small selected={filter === "review"} onPress={() => setFilter("review")}>
+          Needs your OK · {pending.length}
         </Button>
       </View>
       {actions.length > 0 && (
@@ -1115,13 +1120,13 @@ export function ActivityScreen() {
               <Chip
                 tint={
                   a.status === "failed"
-                    ? "#FBEFED"
+                    ? colors.dangerSoft
                     : a.status === "awaiting_review"
                       ? colors.lavender
                       : colors.canvas
                 }
               >
-                {a.status.replace(/_/g, " ")}
+                {statusLabel(a.status)}
               </Chip>
               <ChevronRight size={16} color={colors.muted} />
             </Pressable>
@@ -1130,7 +1135,7 @@ export function ActivityScreen() {
       )}
       {filter === "all" && (
         <Card>
-          <SectionHeading title="Workspace timeline" />
+          <SectionHeading title="Timeline" />
           {w.activity.length ? (
             w.activity.map((a, i) => (
               <View
@@ -1158,7 +1163,7 @@ export function ActivityScreen() {
                     {dateLabel(a.date)} · {timeLabel(a.date)}
                   </Text>
                 </View>
-                <Chip>{a.status}</Chip>
+                <Chip>{statusLabel(a.status)}</Chip>
               </View>
             ))
           ) : (
@@ -1326,7 +1331,7 @@ export function ConnectionsScreen() {
           minHeight: 68,
           paddingVertical: 10,
           borderBottomWidth: index < count - 1 ? 1 : 0,
-          borderBottomColor: "#E5E7E9",
+          borderBottomColor: colors.line,
         },
       ]}
     >
@@ -1335,11 +1340,11 @@ export function ConnectionsScreen() {
           width: 40,
           height: 40,
           borderRadius: 10,
-          backgroundColor: "#FFF",
+          backgroundColor: colors.card,
           alignItems: "center",
           justifyContent: "center",
           borderWidth: 1,
-          borderColor: "#ECEDEF",
+          borderColor: colors.line,
         }}
       >
         <Image
@@ -1398,13 +1403,17 @@ export function ConnectionsScreen() {
         return (
           <View key={title} style={{ gap: 8 }}>
             <Text style={[s.small, { marginLeft: 12 }]}>{title}</Text>
-            <View style={{ paddingHorizontal: 16, borderRadius: 23, backgroundColor: "#F3F4F5" }}>
+            <View
+              style={{ paddingHorizontal: 16, borderRadius: 23, backgroundColor: colors.neutral }}
+            >
               {group.map((row, index) => renderRow(row, index, group.length))}
             </View>
           </View>
         );
       })}
-      {!rows.length && <Text style={s.muted}>No connectors are set up on this server yet.</Text>}
+      {!rows.length && (
+        <Text style={s.muted}>No apps are available to connect yet. Check back soon.</Text>
+      )}
       {selected && (
         <Sheet
           title={selected === "google" ? "Google" : "Plaid"}

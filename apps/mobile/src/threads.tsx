@@ -135,8 +135,8 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
   return (
     <Sheet
       side
-      title="Noa on OpenMuse"
-      subtitle={workspace.mode === "sample" ? "Your workspace" : workspace.profile.name}
+      title="Noa"
+      subtitle={workspace.mode === "sample" ? "Sample account" : workspace.profile.name}
       onClose={onClose}
     >
       <View style={{ gap: 14 }}>
@@ -289,14 +289,14 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
             <LinkRow
               icon={MessageCircle}
               title="Main chat"
-              detail="Saved in this workspace"
+              detail="Saved privately in Noa"
               onPress={() => {
                 navigate("chat");
                 onClose();
               }}
             />
             <Text style={s.muted}>
-              Your conversation is saved in this workspace. You can manage connections in Apps.
+              Your conversation is saved privately. You can manage connections in Apps.
             </Text>
           </>
         )}
@@ -331,7 +331,7 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
         />
         <LinkRow icon={Settings2} title="Apps & settings" onPress={() => go("apps")} />
         <Button small icon={RefreshCw} onPress={() => void mutate(refresh)}>
-          Refresh workspace
+          Refresh
         </Button>
       </View>
     </Sheet>

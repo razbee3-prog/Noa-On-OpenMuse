@@ -184,7 +184,7 @@ export default function App() {
             <Text
               style={{ fontSize: 32, color: colors.text, letterSpacing: -1, fontWeight: "500" }}
             >
-              Welcome to Noa on OpenMuse.
+              Welcome to Noa.
             </Text>
             <Text style={[s.muted, { textAlign: "center" }]}>A little room for your day.</Text>
             {busy ? (
@@ -218,18 +218,19 @@ export default function App() {
                 ) : (
                   <>
                     <Field
-                      label="Workspace access key"
+                      label="Access key"
                       value={accessKey}
                       onChangeText={setAccessKey}
                       secureTextEntry
-                      placeholder="Required for a live workspace"
+                      placeholder="Required to sign in on the web"
                     />
                     <Button primary onPress={() => void connect(accessKey || undefined)}>
-                      Open workspace
+                      Open Noa
                     </Button>
                     <Text style={[s.small, { marginTop: 15 }]}>
-                      Local workspaces open without a key. Make sure your OpenMuse server is running
-                      at {API_URL}.
+                      Local accounts open without a key. If Noa doesn’t open, check that the app can
+                      reach
+                      {API_URL} and try again.
                     </Text>
                   </>
                 )}
@@ -302,7 +303,7 @@ function WorkspaceApp({ token }: { token: string }) {
         ) : (
           <>
             <ActivityIndicator color={colors.blueDark} />
-            <Text style={s.muted}>Opening your workspace…</Text>
+            <Text style={s.muted}>Opening Noa…</Text>
           </>
         )}
       </SafeAreaView>
@@ -362,7 +363,8 @@ function WorkspaceShell({
     data?.tasks.find(
       (task) => task.status === "waiting_approval" || task.status === "waiting_input",
     ) || data?.tasks.find((task) => task.status === "running");
-  const agentName = data?.identity.name || "Noa on OpenMuse";
+  const savedName = data?.identity.name;
+  const agentName = !savedName || savedName === "Noa on OpenMuse" ? "Noa" : savedName;
   const status = activeTask
     ? activeTask.status === "waiting_approval"
       ? `Ready to review · ${activeTask.title}`
@@ -400,50 +402,54 @@ function WorkspaceShell({
         >
           <View
             style={{
-              height: desktop ? 146 : 122,
-              paddingTop: desktop ? 14 : 2,
-              marginHorizontal: 20,
+              minHeight: 60,
+              marginHorizontal: 16,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
             }}
           >
-            <View style={{ position: "absolute", left: 0, top: 16 }}>
-              <IconButton
-                icon={Menu}
-                label="Open conversations and menu"
-                onPress={() => setThreadsOpen(true)}
-              />
-            </View>
-            <View pointerEvents="box-none" style={{ alignItems: "center", gap: 1 }}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Open ${agentName} activity and approvals`}
-                onPress={() => navigate("activity")}
-                style={({ pressed }) => ({
-                  alignItems: "center",
-                  maxWidth: "70%",
-                  opacity: pressed ? 0.65 : 1,
-                })}
-              >
-                <Mascot size={desktop ? 58 : 49} variant={data?.identity.avatar} />
+            <IconButton
+              icon={Menu}
+              label="Open conversations and menu"
+              onPress={() => setThreadsOpen(true)}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${agentName} activity and approvals`}
+              onPress={() => navigate("activity")}
+              style={({ pressed }) => ({
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+                minHeight: 44,
+                flexShrink: 1,
+                paddingHorizontal: 6,
+                opacity: pressed ? 0.65 : 1,
+              })}
+            >
+              <Mascot size={34} variant={data?.identity.avatar} />
+              <View style={{ flexShrink: 1 }}>
                 <Text
+                  numberOfLines={1}
                   style={{
                     fontSize: 16,
                     fontWeight: "600",
                     color: colors.text,
-                    letterSpacing: -0.4,
+                    letterSpacing: -0.3,
                   }}
                 >
                   {agentName}
                 </Text>
-                <Text
-                  numberOfLines={1}
-                  style={{ fontSize: 11, color: colors.muted, marginBottom: 6 }}
-                >
-                  {status}
-                </Text>
-              </Pressable>
-              {section === "chat" && <ComputerEntry />}
-            </View>
-            <View style={{ position: "absolute", right: 0, top: 16 }}>
+                {section === "chat" && (
+                  <Text numberOfLines={1} style={{ fontSize: 12, color: colors.muted }}>
+                    {status}
+                  </Text>
+                )}
+              </View>
+            </Pressable>
+            <View>
               <IconButton
                 icon={Bell}
                 label={`Notifications, ${pending} unread or pending`}
@@ -465,6 +471,11 @@ function WorkspaceShell({
               )}
             </View>
           </View>
+          {section === "chat" && (
+            <View style={{ alignItems: "center", paddingBottom: 4 }}>
+              <ComputerEntry />
+            </View>
+          )}
           <View style={{ flex: 1, minHeight: 0 }}>
             {section !== "chat" && (
               <ScrollView
@@ -543,7 +554,7 @@ function WorkspaceShell({
                 padding: 5,
                 backgroundColor: colors.text,
                 borderRadius: 40,
-                shadowColor: "#0B1215",
+                shadowColor: colors.text,
                 shadowOffset: { width: 0, height: 6 },
                 shadowOpacity: 0.22,
                 shadowRadius: 20,
@@ -561,18 +572,29 @@ function WorkspaceShell({
                     onPress={() => navigate(item.id)}
                     style={{
                       flex: 1,
-                      height: 47,
+                      minHeight: 52,
                       alignItems: "center",
                       justifyContent: "center",
-                      backgroundColor: active ? "rgba(255,255,255,0.16)" : "transparent",
+                      gap: 2,
+                      backgroundColor: active ? colors.onDarkActive : "transparent",
                       borderRadius: 28,
                     }}
                   >
                     <item.icon
-                      size={23}
+                      size={21}
                       strokeWidth={active ? 2.1 : 1.8}
-                      color={active ? "#FFFFFF" : "rgba(255,255,255,0.62)"}
+                      color={active ? colors.onDark : colors.onDarkMuted}
                     />
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        fontSize: 11,
+                        fontWeight: active ? "600" : "500",
+                        color: active ? colors.onDark : colors.onDarkMuted,
+                      }}
+                    >
+                      {item.label}
+                    </Text>
                   </Pressable>
                 );
               })}
@@ -597,13 +619,13 @@ function WorkspaceShell({
               ]}
             >
               <Check size={16} color={colors.blue} />
-              <Text style={{ color: "#FFF", fontSize: 13, flexShrink: 1 }}>{toast}</Text>
+              <Text style={{ color: colors.onDark, fontSize: 13, flexShrink: 1 }}>{toast}</Text>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Dismiss notification"
                 onPress={clearToast}
               >
-                <X size={16} color="#FFF" />
+                <X size={16} color={colors.onDark} />
               </Pressable>
             </View>
           </View>

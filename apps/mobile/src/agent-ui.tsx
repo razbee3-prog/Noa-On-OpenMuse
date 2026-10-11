@@ -1,22 +1,24 @@
 import {
   ArrowRight,
   Bell,
+  BriefcaseBusiness,
   CalendarDays,
   ChevronRight,
   CircleDollarSign,
   FileText,
   Globe2,
-  Heart,
   Lightbulb,
   ListChecks,
+  type LucideIcon,
   Mail,
   Pause,
   Play,
   Plus,
+  Receipt,
   RefreshCw,
   Square,
   Target,
-  Users,
+  Wallet,
   X,
 } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
@@ -50,12 +52,12 @@ import {
   SectionHeading,
   Sheet,
   s,
+  statusLabel,
 } from "./ui";
 import { useWorkspace } from "./workspace";
 
-export function statusLabel(value: string) {
-  return value.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
-}
+export { statusLabel };
+
 function stamp(value?: string) {
   return value
     ? new Date(value).toLocaleString(undefined, {
@@ -117,7 +119,7 @@ export function TaskCard({
           padding: compact ? 15 : 20,
           gap: 11,
           borderRadius: 22,
-          backgroundColor: "#F0F1F2",
+          backgroundColor: colors.neutral,
         }}
       >
         <View style={[s.row, { gap: 10 }]}>
@@ -144,7 +146,7 @@ export function TaskCard({
               style={{
                 height: 4,
                 width: `${Math.round((done / task.plan.length) * 100)}%`,
-                backgroundColor: "#6AAEE0",
+                backgroundColor: colors.progress,
                 borderRadius: 4,
               }}
             />
@@ -709,7 +711,7 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
     try {
       await mutate("/goals", {
         title: goalTitle.trim(),
-        category: "Finances",
+        category: "Money",
         description: `Inspired by ${artifact.title}: ${artifact.summary}`,
         milestones: ["Choose a savings target", "Review spending each week"],
       });
@@ -731,7 +733,7 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
   const period = record(artifact.data.period);
   return (
     <Card
-      style={{ gap: 12, padding: 10, backgroundColor: "#EEEEF0", maxWidth: 440, width: "100%" }}
+      style={{ gap: 12, padding: 10, backgroundColor: colors.line, maxWidth: 440, width: "100%" }}
     >
       <Pressable
         accessibilityRole="button"
@@ -744,7 +746,7 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
             minHeight: 200,
             borderRadius: 16,
             overflow: "hidden",
-            backgroundColor: "#080B10",
+            backgroundColor: colors.financeCanvas,
             padding: 20,
           }}
         >
@@ -752,15 +754,17 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
             <Svg width="100%" height="100%">
               <Defs>
                 <LinearGradient id="finance" x1="0" y1="0" x2="0.5" y2="1">
-                  <Stop offset="0" stopColor="#281066" />
-                  <Stop offset="0.5" stopColor="#163BBF" />
-                  <Stop offset="1" stopColor="#148CE8" />
+                  <Stop offset="0" stopColor={colors.gradientStart} />
+                  <Stop offset="0.5" stopColor={colors.gradientMid} />
+                  <Stop offset="1" stopColor={colors.gradientEnd} />
                 </LinearGradient>
               </Defs>
               <Rect width="100%" height="100%" fill="url(#finance)" />
             </Svg>
           </View>
-          <Text style={{ color: "#D4DCFC", fontSize: 11, lineHeight: 18, marginBottom: 20 }}>
+          <Text
+            style={{ color: colors.financeInk, fontSize: 11, lineHeight: 18, marginBottom: 20 }}
+          >
             Read from your imported transactions.{"\n"}
             {String(period?.from ?? "")} — {String(period?.to ?? "")}
             {"\n"}
@@ -776,9 +780,14 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
             ).map(([label, key]) => (
               <View
                 key={key}
-                style={{ flex: 1, padding: 11, borderRadius: 12, backgroundColor: "#1D2025" }}
+                style={{
+                  flex: 1,
+                  padding: 11,
+                  borderRadius: 12,
+                  backgroundColor: colors.financeTile,
+                }}
               >
-                <Text style={{ color: "#A4A7AD", fontSize: 9 }}>{label}</Text>
+                <Text style={{ color: colors.onDarkMuted, fontSize: 9 }}>{label}</Text>
                 <Text
                   selectable
                   numberOfLines={1}
@@ -787,13 +796,16 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
                   style={{
                     fontSize: 17,
                     fontWeight: "600",
-                    color: key === "saved" ? "#58D3AE" : "#FFF",
+                    fontVariant: ["tabular-nums"],
+                    color: key === "saved" ? colors.moneyPositiveOnDark : colors.onDark,
                     marginTop: 5,
                   }}
                 >
                   {amount(artifact.data[key])}
                 </Text>
-                <Text style={{ color: "#7E8289", fontSize: 8, marginTop: 4 }}>source currency</Text>
+                <Text style={{ color: colors.onDarkMuted, fontSize: 8, marginTop: 4 }}>
+                  source currency
+                </Text>
               </View>
             ))}
           </View>
@@ -817,9 +829,9 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
               <View key={String(row.name)} style={{ gap: 8 }}>
                 <View style={s.between}>
                   <Text style={s.text}>{String(row.name)}</Text>
-                  <Text style={s.text}>{amount(row.amount)}</Text>
+                  <Text style={[s.text, s.money]}>{amount(row.amount)}</Text>
                 </View>
-                <View style={{ height: 7, backgroundColor: "#DFE8EB", borderRadius: 8 }}>
+                <View style={{ height: 7, backgroundColor: colors.track, borderRadius: 8 }}>
                   <View
                     style={{
                       width: `${Math.min(100, (Number(row.amount) / spending) * 100)}%`,
@@ -843,7 +855,7 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
                 label="Turn this into a savings goal"
                 value={goalTitle}
                 onChangeText={setGoalTitle}
-                placeholder="What would you like to save for?"
+                placeholder="Three months of expenses in savings"
               />
               <ErrorNotice error={goalError} />
               <Button
@@ -870,7 +882,7 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
                       {String(row.date)} · {String(row.category)}
                     </Text>
                   </View>
-                  <Text style={s.text}>{amount(row.amount)}</Text>
+                  <Text style={[s.text, s.money]}>{amount(row.amount)}</Text>
                 </View>
               ) : null;
             })}
@@ -900,6 +912,11 @@ export function DelegateSheet({ goalId, milestoneId }: { goalId?: string; milest
   );
   const [messageId, setMessageId] = useState("");
   const [csv, setCsv] = useState("");
+  const bankConnected = workspace.connections.find((c) => c.id === "plaid")?.status === "connected";
+  const [financeSource, setFinanceSource] = useState<"bank" | "csv">(
+    bankConnected ? "bank" : "csv",
+  );
+  const useBank = bankConnected && financeSource === "bank";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function submit() {
@@ -914,7 +931,14 @@ export function DelegateSheet({ goalId, milestoneId }: { goalId?: string; milest
         kind,
         goalId,
         milestoneId,
-        input: kind === "finance" ? { csv } : kind === "document" ? { messageId } : {},
+        input:
+          kind === "finance"
+            ? useBank
+              ? { source: "bank" }
+              : { csv }
+            : kind === "document"
+              ? { messageId }
+              : {},
       };
       const serialized = JSON.stringify(input);
       if (submission.current?.input !== serialized)
@@ -934,7 +958,7 @@ export function DelegateSheet({ goalId, milestoneId }: { goalId?: string; milest
   return (
     <Sheet
       title="Hand over an outcome"
-      subtitle="OpenMuse saves a plan and keeps working on the server."
+      subtitle="Noa saves a plan and keeps working, even when the app is closed."
       onClose={close}
     >
       {milestoneId && (
@@ -946,7 +970,7 @@ export function DelegateSheet({ goalId, milestoneId }: { goalId?: string; milest
       )}
       <View style={[s.row, { flexWrap: "wrap", gap: 8, marginBottom: 20 }]}>
         {(["plan", "document", "finance", "agent"] as const).map((item) => (
-          <Button small primary={kind === item} key={item} onPress={() => setKind(item)}>
+          <Button small selected={kind === item} key={item} onPress={() => setKind(item)}>
             {item === "agent" ? "General task" : statusLabel(item)}
           </Button>
         ))}
@@ -958,10 +982,12 @@ export function DelegateSheet({ goalId, milestoneId }: { goalId?: string; milest
         multiline
         placeholder={
           kind === "document"
-            ? "Fill the attached form and prepare a reply for my review"
+            ? "Fill out the attached tax form and prepare a reply for my review"
             : kind === "finance"
-              ? "Summarize my spending and suggest a savings plan"
-              : "Make a practical plan for my week"
+              ? "Where did my money go last month?"
+              : kind === "plan"
+                ? "Build a plan to pay off my credit card"
+                : "Help me prepare to ask for a raise"
         }
       />
       {kind === "document" && (
@@ -984,7 +1010,21 @@ export function DelegateSheet({ goalId, milestoneId }: { goalId?: string; milest
           )}
         </View>
       )}
-      {kind === "finance" && (
+      {kind === "finance" && bankConnected && (
+        <View style={{ gap: 8, marginBottom: 12 }}>
+          <CheckRow
+            checked={financeSource === "bank"}
+            label="Use my connected bank"
+            onPress={() => setFinanceSource("bank")}
+          />
+          <CheckRow
+            checked={financeSource === "csv"}
+            label="Paste a spreadsheet instead"
+            onPress={() => setFinanceSource("csv")}
+          />
+        </View>
+      )}
+      {kind === "finance" && !useBank && (
         <>
           <Field
             label="Transaction CSV"
@@ -1006,8 +1046,8 @@ export function DelegateSheet({ goalId, milestoneId }: { goalId?: string; milest
             </Button>
           )}
           <Text style={[s.small, { marginVertical: 12 }]}>
-            Positive amounts are expenses; negative amounts are income. Imported data only. No bank
-            connection is implied.
+            Positive amounts are expenses; negative amounts are income.
+            {bankConnected ? " Only the pasted rows are used." : " No bank connection is implied."}
           </Text>
         </>
       )}
@@ -1025,7 +1065,7 @@ export function DelegateSheet({ goalId, milestoneId }: { goalId?: string; milest
           Boolean(milestoneId && !milestone) ||
           !prompt.trim() ||
           (kind === "document" && !messageId) ||
-          (kind === "finance" && !csv.trim())
+          (kind === "finance" && !useBank && !csv.trim())
         }
         onPress={() => void submit()}
       >
@@ -1033,6 +1073,25 @@ export function DelegateSheet({ goalId, milestoneId }: { goalId?: string; milest
       </Button>
     </Sheet>
   );
+}
+const ideaAreas: { test: RegExp; icon: LucideIcon }[] = [
+  { test: /money|spend|saving|budget|subscription|bank|debt|credit|bill/i, icon: Wallet },
+  { test: /career|raise|salary|job|offer|resume|interview|paid/i, icon: BriefcaseBusiness },
+  { test: /tax|deduct|w-2|1099|irs|quarterly/i, icon: Receipt },
+];
+function ideaRank(idea: Idea) {
+  const text = `${idea.title} ${idea.prompt}`;
+  const index = ideaAreas.findIndex((area) => area.test.test(text));
+  return index === -1 ? ideaAreas.length : index;
+}
+function ideaIcon(idea: Idea): LucideIcon {
+  const text = `${idea.title} ${idea.prompt}`;
+  const area = ideaAreas.find((item) => item.test.test(text));
+  if (area) return area.icon;
+  if (/document|permission|form|pdf/i.test(text)) return FileText;
+  if (/goal|plan/i.test(text)) return Target;
+  if (/coordinate|meet|calendar/i.test(text)) return CalendarDays;
+  return Lightbulb;
 }
 export function IdeasScreen() {
   const { data, mutate } = useAgentWorkspace();
@@ -1049,15 +1108,19 @@ export function IdeasScreen() {
       setBusy(false);
     }
   }
-  const ideas = data?.ideas.filter((idea) => idea.status === "new") || [];
+  const ideas = (data?.ideas.filter((idea) => idea.status === "new") || []).sort(
+    (a, b) => ideaRank(a) - ideaRank(b),
+  );
   return (
     <View style={{ gap: 20 }}>
       <AgentStatus />
       <View style={s.between}>
         <Text style={s.small}>Inspired by your connected apps</Text>
-        <Button small icon={RefreshCw} busy={busy} onPress={() => void refreshIdeas()}>
-          Find ideas
-        </Button>
+        {!!ideas.length && (
+          <Button small icon={RefreshCw} busy={busy} onPress={() => void refreshIdeas()}>
+            Find ideas
+          </Button>
+        )}
       </View>
       <ErrorNotice error={error} />
       {ideas.map((idea) => (
@@ -1067,8 +1130,12 @@ export function IdeasScreen() {
         <Empty
           icon={Lightbulb}
           title="Room for a good idea"
-          detail="Find ideas from the sources you have granted access to. Each suggestion includes its evidence."
-        />
+          detail="Noa suggests next steps for your money, career and taxes from the apps you connect. Each suggestion shows its evidence."
+        >
+          <Button primary icon={RefreshCw} busy={busy} onPress={() => void refreshIdeas()}>
+            Find ideas
+          </Button>
+        </Empty>
       )}
       {(data?.ideas || [])
         .filter((idea) => idea.status === "accepted")
@@ -1126,17 +1193,22 @@ function IdeaCard({ idea }: { idea: Idea }) {
         onPress={() => setExpanded(!expanded)}
         style={{ flexDirection: "row", gap: 14 }}
       >
-        <Text style={{ fontSize: 27, width: 34, paddingTop: 3 }}>
-          {/document|permission|form/i.test(idea.title)
-            ? "📋"
-            : /money|spend|saving/i.test(idea.title)
-              ? "💸"
-              : /goal|plan|training/i.test(idea.title)
-                ? "👟"
-                : /dinner|table/i.test(idea.title)
-                  ? "🍽️"
-                  : "💡"}
-        </Text>
+        <View
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: colors.sky,
+            alignItems: "center",
+            justifyContent: "center",
+            marginTop: 2,
+          }}
+        >
+          {(() => {
+            const Icon = ideaIcon(idea);
+            return <Icon size={18} color={colors.blueDark} />;
+          })()}
+        </View>
         <View style={{ flex: 1, gap: 5 }}>
           <Text style={[s.heading, { fontSize: 16, lineHeight: 23 }]}>{idea.title}</Text>
           <Text style={s.muted}>{idea.reason}</Text>
@@ -1146,12 +1218,7 @@ function IdeaCard({ idea }: { idea: Idea }) {
         <View style={{ gap: 15, marginTop: 18, paddingLeft: 48 }}>
           <EvidenceList items={idea.evidence} />
           {editing && (
-            <Field
-              label="What should OpenMuse do?"
-              value={prompt}
-              onChangeText={setPrompt}
-              multiline
-            />
+            <Field label="What should Noa do?" value={prompt} onChangeText={setPrompt} multiline />
           )}
           <ErrorNotice error={error} />
           <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
@@ -1196,11 +1263,11 @@ export function GoalsScreen() {
                 height: 16,
                 borderRadius: 8,
                 borderWidth: 5,
-                borderColor: "#D9F1E2",
-                backgroundColor: "#24A46B",
+                borderColor: colors.trackGreenSoft,
+                backgroundColor: colors.trackGreen,
               }}
             />
-            <Text style={[s.heading, { color: "#189A58" }]}>Tracking</Text>
+            <Text style={[s.heading, { color: colors.trackGreenText }]}>Tracking</Text>
           </View>
           <Button small icon={Plus} onPress={() => setAdding("Tracking")}>
             Track
@@ -1214,7 +1281,7 @@ export function GoalsScreen() {
             onPress={() => setSelectedMonitor(item.id)}
             style={[s.row, { gap: 12, paddingVertical: 13 }]}
           >
-            <Square size={21} color="#A7AAAC" />
+            <Square size={21} color={colors.muted} />
             <View style={{ flex: 1, gap: 4 }}>
               <Text style={s.text}>{item.title}</Text>
               <Text numberOfLines={1} style={s.muted}>
@@ -1223,12 +1290,12 @@ export function GoalsScreen() {
                   : statusLabel(item.status)}
               </Text>
             </View>
-            <ChevronRight size={18} color="#A3A6A8" />
+            <ChevronRight size={18} color={colors.muted} />
           </Pressable>
         ))}
         {!monitors.length && (
           <Text style={[s.muted, { paddingVertical: 10 }]}>
-            Ticket prices, a reservation, a page you’re watching.
+            A savings rate, a bill, a price you’re watching.
           </Text>
         )}
         {monitors.length > 3 && (
@@ -1246,8 +1313,8 @@ export function GoalsScreen() {
               height: 16,
               borderRadius: 8,
               borderWidth: 5,
-              borderColor: "#D7E9FA",
-              backgroundColor: "#3D9BDE",
+              borderColor: colors.goalBlueSoft,
+              backgroundColor: colors.goalBlue,
             }}
           />
           <Text style={[s.heading, { color: colors.blueDark }]}>Goals</Text>
@@ -1262,7 +1329,7 @@ export function GoalsScreen() {
           >
             <Square
               size={21}
-              color="#A7AAAC"
+              color={colors.muted}
               fill={item.status === "completed" ? colors.green : "transparent"}
             />
             <View style={{ flex: 1, gap: 4 }}>
@@ -1271,7 +1338,7 @@ export function GoalsScreen() {
                 {item.description || statusLabel(item.status)}
               </Text>
             </View>
-            <ChevronRight size={18} color="#A3A6A8" />
+            <ChevronRight size={18} color={colors.muted} />
           </Pressable>
         ))}
         {!data?.goals.length && (
@@ -1283,9 +1350,9 @@ export function GoalsScreen() {
       <View style={{ height: 1, backgroundColor: colors.line }} />
       <Text style={s.heading}>Create a goal</Text>
       {[
-        { name: "Health", icon: Heart },
-        { name: "Relationships", icon: Users },
-        { name: "Finances", icon: CircleDollarSign },
+        { name: "Money", icon: CircleDollarSign },
+        { name: "Career", icon: BriefcaseBusiness },
+        { name: "Taxes", icon: Receipt },
         { name: "Something else", icon: Target },
       ].map((item) => (
         <Pressable
@@ -1295,9 +1362,9 @@ export function GoalsScreen() {
           onPress={() => setAdding(item.name)}
           style={[s.row, { gap: 12, minHeight: 38 }]}
         >
-          <item.icon size={23} color="#989C9F" />
-          <Text style={[s.text, { flex: 1, color: "#666A6D" }]}>{item.name}</Text>
-          <Plus size={18} color="#989C9F" />
+          <item.icon size={23} color={colors.muted} />
+          <Text style={[s.text, { flex: 1, color: colors.muted }]}>{item.name}</Text>
+          <Plus size={18} color={colors.muted} />
         </Pressable>
       ))}
       {adding && (
@@ -1358,7 +1425,7 @@ function GoalForm({ onDone, category }: { onDone: () => void; category?: string 
         label="Your goal"
         value={title}
         onChangeText={setTitle}
-        placeholder="Build a three-month emergency fund"
+        placeholder="Pay off my credit card by next summer"
       />
       <Field
         label="What does success look like?"
@@ -1525,12 +1592,12 @@ function MonitorForm({ onDone }: { onDone: () => void }) {
         label="What are you watching?"
         value={title}
         onChangeText={setTitle}
-        placeholder="A table at my favorite restaurant"
+        placeholder="The savings rate at my bank"
       />
       {workspace.mode === "sample" && (
         <CheckRow
           checked={sample}
-          label="Try the built-in availability page"
+          label="Try the built-in sample page"
           onPress={() => setSample(!sample)}
         />
       )}
@@ -1540,7 +1607,7 @@ function MonitorForm({ onDone }: { onDone: () => void }) {
           value={url}
           onChangeText={setUrl}
           autoCapitalize="none"
-          placeholder="https://example.com/product"
+          placeholder="https://example.com/savings-rates"
         />
       )}
       <Text style={[s.small, { marginBottom: 10 }]}>Notify me when</Text>
@@ -1571,7 +1638,7 @@ function MonitorForm({ onDone }: { onDone: () => void }) {
       <Text style={[s.small, { marginBottom: 14 }]}>
         {sample
           ? "Changes to this built-in page stay in your workspace."
-          : "OpenMuse checks this public page on the server and saves meaningful changes in Notifications."}
+          : "Noa checks this public page regularly and saves meaningful changes in Notifications."}
       </Text>
       <ErrorNotice error={error} />
       <Button
@@ -1731,7 +1798,7 @@ export function AppsScreen() {
     agentSettingsRequested = false;
     return requested;
   });
-  const [name, setName] = useState(data?.identity.name || "Noa on OpenMuse");
+  const [name, setName] = useState(data?.identity.name || "Noa");
   const [tone, setTone] = useState(data?.identity.tone || "warm");
   const [avatar, setAvatar] = useState(data?.identity.avatar || "sky");
   const [showChatUpdates, setShowChatUpdates] = useState(data?.identity.showChatUpdates !== false);
@@ -1794,7 +1861,7 @@ export function AppsScreen() {
       <AgentStatus />
       <ConnectionsScreen />
       <Text style={s.heading}>On your computer</Text>
-      <Card style={{ paddingVertical: 3, backgroundColor: "#F4F5F6" }}>
+      <Card style={{ paddingVertical: 3, backgroundColor: colors.neutral }}>
         {shortcuts.map((item) => (
           <LinkRow
             key={item.section}
@@ -1835,7 +1902,7 @@ export function AppsScreen() {
             <Field label="Name" value={name} onChangeText={setName} />
             <View style={[s.row, { gap: 8 }]}>
               {(["warm", "concise", "thoughtful"] as const).map((item) => (
-                <Button key={item} small primary={tone === item} onPress={() => setTone(item)}>
+                <Button key={item} small selected={tone === item} onPress={() => setTone(item)}>
                   {statusLabel(item)}
                 </Button>
               ))}
@@ -1869,7 +1936,7 @@ export function AppsScreen() {
               label="Remember something about me"
               value={memory}
               onChangeText={setMemory}
-              placeholder="I prefer morning meetings"
+              placeholder="I’m paid twice a month and file taxes jointly"
             />
             <Button
               busy={busy}

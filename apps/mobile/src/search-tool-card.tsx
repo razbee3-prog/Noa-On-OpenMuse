@@ -36,7 +36,7 @@ export function SearchToolCard({ result, loading }: { result: unknown; loading: 
   const count = sources.length;
   return (
     <Card
-      style={{ padding: 14, gap: 10, backgroundColor: "#EEEEF0", maxWidth: 440, width: "100%" }}
+      style={{ padding: 14, gap: 10, backgroundColor: colors.line, maxWidth: 440, width: "100%" }}
     >
       <View style={[s.row, { gap: 10 }]}>
         {working ? (

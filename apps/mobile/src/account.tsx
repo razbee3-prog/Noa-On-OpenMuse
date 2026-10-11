@@ -87,6 +87,7 @@ export function AccountCard() {
         </View>
       ) : null}
       <Button
+        quiet
         onPress={() =>
           void run(async () => {
             await api.request("/api/session", undefined, "DELETE").catch(() => undefined);
@@ -96,7 +97,7 @@ export function AccountCard() {
       >
         Sign out
       </Button>
-      <Button small onPress={() => void Linking.openURL(`${API_URL}/privacy.html`)}>
+      <Button quiet onPress={() => void Linking.openURL(`${API_URL}/privacy.html`)}>
         Privacy policy
       </Button>
       {account?.provider === "apple" && (
@@ -109,7 +110,7 @@ export function AccountCard() {
                 await signOutLocally();
               });
             const message =
-              "This permanently deletes your account, chats, tasks, memories, files, computer workspace and connected accounts. It can't be undone.";
+              "This permanently deletes your account, chats, tasks, memories, files, computer files and connected accounts. It can't be undone.";
             if (Platform.OS === "web") {
               if (globalThis.confirm?.(message)) remove();
             } else
@@ -122,6 +123,15 @@ export function AccountCard() {
           Delete account
         </Button>
       )}
+      <Text
+        accessibilityRole="link"
+        onPress={() =>
+          void Linking.openURL("https://github.com/CopilotKit/openmuse/blob/main/LICENSE")
+        }
+        style={[s.small, { textAlign: "center", paddingVertical: 12 }]}
+      >
+        Built on OpenMuse · MIT licence
+      </Text>
     </Card>
   );
 }

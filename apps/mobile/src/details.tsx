@@ -54,6 +54,7 @@ import {
   SectionHeading,
   Sheet,
   s,
+  statusLabel,
   timeLabel,
 } from "./ui";
 import { type Detail, useWorkspace } from "./workspace";
@@ -78,7 +79,7 @@ export function Details({ detail }: { detail: Detail }) {
   if (detail.type === "review") return <ReviewDetail initial={detail.action} />;
   if (detail.type === "browser") return <BrowserDetail initial={detail.browser} />;
   return (
-    <Sheet title="Your workspace" subtitle="A little room for everything." onClose={close}>
+    <Sheet title="Your things" subtitle="Mail, calendar and files in one place." onClose={close}>
       {[
         { section: "mail" as const, title: "Mail", icon: MailIcon },
         { section: "calendar" as const, title: "Calendar", icon: CalendarDays },
@@ -264,7 +265,7 @@ function EmailEditor({ draft }: { draft?: Partial<EmailDraft> & { id?: string } 
           ...(draft?.id ? { id: draft.id } : {}),
         });
         await refresh();
-        notify("Draft saved in OpenMuse.");
+        notify("Draft saved.");
         close();
       }
     } catch (e) {
@@ -276,7 +277,7 @@ function EmailEditor({ draft }: { draft?: Partial<EmailDraft> & { id?: string } 
   return (
     <Sheet
       title={draft?.threadId ? "Write a reply" : "A new message"}
-      subtitle={`From ${w.profile.email} · saved privately in OpenMuse`}
+      subtitle={`From ${w.profile.email} · saved privately in Noa`}
       onClose={close}
     >
       <Field
@@ -617,9 +618,7 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
           <Text style={s.heading}>{action.title}</Text>
           <Text style={s.small}>{action.kind.replace(".", " · ")}</Text>
         </View>
-        <Chip tint={pending ? colors.lavender : colors.green}>
-          {action.status.replace(/_/g, " ")}
-        </Chip>
+        <Chip tint={pending ? colors.lavender : colors.green}>{statusLabel(action.status)}</Chip>
       </View>
       <Card style={{ gap: 13 }}>
         <ReviewLine label="Account" value={action.account || w.profile.email} />
@@ -939,7 +938,7 @@ function BrowserDetail({ initial }: { initial: BrowserSession }) {
   return (
     <Sheet
       title={browserSite(browser.url)}
-      subtitle={`${browser.status} · updated ${timeLabel(browser.updatedAt)}`}
+      subtitle={`${statusLabel(browser.status)} · updated ${timeLabel(browser.updatedAt)}`}
       onClose={close}
       wide
     >

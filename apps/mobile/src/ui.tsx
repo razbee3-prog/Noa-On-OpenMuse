@@ -32,8 +32,81 @@ export const colors = {
   lavender: "#F0EEFA",
   orange: "#FDF0DF",
   danger: "#AA4A45",
+  dangerSoft: "#FBEFED",
+  neutral: "#F1F2F3",
+  scrim: "rgba(11,18,21,0.32)",
+  scrimSoft: "rgba(35,48,44,0.25)",
+  handle: "#D8DBDE",
+  mascotSky: "#ECF5FA",
+  mascotSand: "#FAF0DF",
+  mascotLilac: "#F1ECF9",
+  progress: "#6AAEE0",
+  financeCanvas: "#080B10",
+  financeTile: "#1D2025",
+  financeInk: "#D4DCFC",
+  gradientStart: "#281066",
+  gradientMid: "#163BBF",
+  gradientEnd: "#148CE8",
+  moneyPositiveOnDark: "#58D3AE",
+  track: "#DFE8EB",
+  trackGreen: "#24A46B",
+  trackGreenSoft: "#D9F1E2",
+  trackGreenText: "#17804A",
+  goalBlue: "#3D9BDE",
+  goalBlueSoft: "#D7E9FA",
+  skySoft: "#E8F2F8",
+  skyMid: "#DAEAF2",
+  skyLine: "#C8DBE6",
+  skyDot: "#78ABD0",
+  sage: "#739174",
+  sand: "#F0F0E7",
+  sandLine: "#E1E2D9",
+  tileSky: "#BCDAEB",
+  tileSage: "#C7D6AB",
+  tileLilac: "#D9CDEA",
+  stone: "#EDEFEA",
+  stoneLine: "#DDE3DD",
+  stoneActive: "#A4BED0",
+  stoneSoft: "#E3E7E3",
+  focus: "#C7E4F9",
+  shadow: "#18384B",
+  disabledIcon: "#9CB5C5",
+  online: "#57AD85",
+  offline: "#ACB0B5",
+  success: "#47896C",
+  mailCard: "#F0EFF2",
+  brandPink: "#FC2359",
+  onDark: "#FFFFFF",
+  onDarkMuted: "rgba(255,255,255,0.72)",
+  onDarkActive: "rgba(255,255,255,0.16)",
+  moneyPositive: "#1B7A43",
+  moneyNegative: "#B3261E",
 };
+const statusWords: Record<string, string> = {
+  awaiting_review: "Needs your OK",
+  waiting_approval: "Needs your OK",
+  waiting_input: "Needs your answer",
+  queued: "Up next",
+  running: "Working on it",
+  executing: "Working on it",
+  approved: "Approved",
+  rejected: "Declined",
+  completed: "Done",
+  succeeded: "Done",
+  failed: "Didn’t finish",
+  cancelled: "Cancelled",
+  canceled: "Cancelled",
+  active: "Active",
+  paused: "Paused",
+  closed: "Closed",
+  expired: "Expired",
+};
+export function statusLabel(status: string) {
+  const words = status.replace(/[_-]+/g, " ").trim();
+  return statusWords[status] ?? words.charAt(0).toUpperCase() + words.slice(1);
+}
 export const s = StyleSheet.create({
+  money: { fontVariant: ["tabular-nums"] },
   row: { flexDirection: "row", alignItems: "center" },
   between: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   text: { color: colors.text, fontSize: 15, lineHeight: 23 },
@@ -64,7 +137,7 @@ export const s = StyleSheet.create({
     paddingVertical: 12,
     color: colors.text,
     fontSize: 16,
-    backgroundColor: "#FFF",
+    backgroundColor: colors.card,
     minHeight: 45,
   },
   field: { gap: 7, marginBottom: 16 },
@@ -79,7 +152,9 @@ export const s = StyleSheet.create({
     borderRadius: 24,
   },
   primary: { backgroundColor: colors.blue },
-  secondary: { backgroundColor: "#F1F2F3" },
+  secondary: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line },
+  quiet: { backgroundColor: "transparent" },
+  selected: { backgroundColor: colors.sky, borderWidth: 1, borderColor: colors.blueDark },
   buttonText: { fontSize: 14, fontWeight: "600" },
   chip: {
     paddingHorizontal: 10,
@@ -97,10 +172,16 @@ export const s = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.sky,
   },
-  error: { padding: 16, borderRadius: 14, backgroundColor: "#FBEFED", marginVertical: 10, gap: 4 },
+  error: {
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: colors.dangerSoft,
+    marginVertical: 10,
+    gap: 4,
+  },
   modalShade: {
     flex: 1,
-    backgroundColor: "rgba(35,48,44,0.25)",
+    backgroundColor: colors.scrimSoft,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
@@ -125,6 +206,8 @@ export function Button({
   busy,
   small,
   danger,
+  selected,
+  quiet,
   style,
 }: {
   children: ReactNode;
@@ -135,6 +218,8 @@ export function Button({
   busy?: boolean;
   small?: boolean;
   danger?: boolean;
+  selected?: boolean;
+  quiet?: boolean;
   style?: ViewStyle;
 }) {
   const color = danger ? colors.danger : colors.text;
@@ -142,12 +227,12 @@ export function Button({
     <Pressable
       accessibilityRole="button"
       disabled={disabled || busy}
-      accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy }}
+      accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy, selected }}
       onPress={onPress}
       style={({ pressed }) => [
         s.button,
-        primary ? s.primary : s.secondary,
-        small && { minHeight: 38, paddingVertical: 7, paddingHorizontal: 13 },
+        primary ? s.primary : selected ? s.selected : quiet ? s.quiet : s.secondary,
+        small && { minHeight: 44, paddingVertical: 7, paddingHorizontal: 13 },
         (disabled || busy) && { opacity: 0.5 },
         pressed && { transform: [{ scale: 0.98 }] },
         style,
@@ -158,7 +243,9 @@ export function Button({
       ) : Icon ? (
         <Icon size={15} color={color} />
       ) : null}
-      <Text style={[s.buttonText, { color }]}>{children}</Text>
+      <Text style={[s.buttonText, { color: quiet && !danger ? colors.muted : color }]}>
+        {children}
+      </Text>
     </Pressable>
   );
 }
@@ -183,7 +270,7 @@ export function IconButton({
           alignItems: "center",
           justifyContent: "center",
           borderRadius: 22,
-          backgroundColor: pressed ? colors.line : "#FFFFFF",
+          backgroundColor: pressed ? colors.line : colors.card,
         },
       ]}
     >
@@ -301,7 +388,7 @@ function SideSheet({
             paddingBottom: Math.max(insets.bottom, 12),
             borderTopRightRadius: 26,
             borderBottomRightRadius: 26,
-            shadowColor: "#0B1215",
+            shadowColor: colors.text,
             shadowOpacity: 0.18,
             shadowRadius: 24,
             shadowOffset: { width: 6, height: 0 },
@@ -338,7 +425,7 @@ function SideSheet({
           accessibilityRole="button"
           accessibilityLabel="Close menu"
           onPress={close}
-          style={{ flex: 1, backgroundColor: "rgba(11,18,21,0.32)" }}
+          style={{ flex: 1, backgroundColor: colors.scrim }}
         />
       </Animated.View>
     </Modal>
@@ -394,7 +481,7 @@ export function Sheet({
                 width: 34,
                 height: 4,
                 borderRadius: 3,
-                backgroundColor: "#D8DBDE",
+                backgroundColor: colors.handle,
                 marginTop: 10,
               }}
             />
@@ -445,12 +532,12 @@ export function CheckRow({
           borderRadius: 5,
           borderWidth: 1,
           borderColor: checked ? colors.text : colors.line,
-          backgroundColor: checked ? colors.text : "#FFF",
+          backgroundColor: checked ? colors.text : colors.card,
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        {checked && <Check size={13} color="#FFF" />}
+        {checked && <Check size={13} color={colors.onDark} />}
       </View>
       <Text style={[s.text, { flex: 1 }]}>{label}</Text>
     </Pressable>
@@ -520,12 +607,12 @@ export function Mascot({
   variant?: "sky" | "sand" | "lilac";
 }) {
   const palette = {
-    sky: "#ECF5FA",
-    sand: "#FAF0DF",
-    lilac: "#F1ECF9",
+    sky: colors.mascotSky,
+    sand: colors.mascotSand,
+    lilac: colors.mascotLilac,
   }[variant];
   return (
-    <View accessibilityLabel="OpenMuse capybara" style={{ width: size, height: size }}>
+    <View accessibilityLabel="Capybara mascot" style={{ width: size, height: size }}>
       <View
         style={{
           position: "absolute",
