@@ -30,6 +30,8 @@ export interface ConnectorSpec {
   capabilities: string[];
   /** Minimum scopes requested at connect time (enforced per Nango connect session). */
   scopes?: { user_scopes?: string; connection_config?: { oauth_scopes_override?: string } };
+  /** Connects through Nango's hosted form (API keys) instead of an OAuth redirect. */
+  connectForm?: boolean;
   /** Hidden until the provider approves production access (listed in NANGO_APPROVED_CONNECTORS). */
   needsProductionApproval?: boolean;
 }
@@ -55,6 +57,8 @@ export const CONNECTORS: ConnectorSpec[] = [
     scopes: {
       user_scopes:
         "search:read channels:history groups:history im:history mpim:history channels:read groups:read im:read mpim:read users:read chat:write",
+      // A blank bot scope makes Slack issue only the user token, which Nango then proxies with.
+      connection_config: { oauth_scopes_override: " " },
     },
     capabilities: ["Search messages", "Reviewed send"],
   },
@@ -95,6 +99,7 @@ export const CONNECTORS: ConnectorSpec[] = [
     name: "Stripe",
     description: "Balance, recent payments and payouts",
     providers: ["stripe-api-key"],
+    connectForm: true,
     capabilities: ["Balance", "Payments", "Payouts"],
   },
   {
@@ -190,15 +195,13 @@ export class ConnectorService {
     const { spec, key } = await this.integration(id);
     if (await this.connection(owner, key)) return { connected: true, url: null };
     try {
-      const session = await this.requireClient().createConnectSession(
-        owner,
-        key,
-        displayName,
-        spec.scopes,
-      );
+      const client = this.requireClient();
+      const session = await client.createConnectSession(owner, key, displayName, spec.scopes);
       return {
         connected: false,
-        url: session.connect_link ?? null,
+        url: spec.connectForm
+          ? (session.connect_link ?? null)
+          : client.oauthConnectUrl(key, session.token),
         token: session.token,
         name: spec.name,
       };

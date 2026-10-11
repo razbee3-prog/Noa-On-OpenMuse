@@ -75,6 +75,11 @@ export class NangoClient {
     return body.data;
   }
 
+  /** Direct OAuth start URL: opens the provider in the same tab, so it works from a phone browser. */
+  oauthConnectUrl(integration: string, sessionToken: string) {
+    return `${this.baseUrl}/oauth/connect/${encodeURIComponent(integration)}?connect_session_token=${encodeURIComponent(sessionToken)}`;
+  }
+
   /** All connections Nango holds for this owner (filtered by our derived end-user id). */
   async connections(owner: string) {
     const endUserId = NangoClient.endUserId(owner);

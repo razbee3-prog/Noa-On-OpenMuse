@@ -214,7 +214,12 @@ test("a Nango connection made by one account is invisible to and unusable by ano
     endUserId: NangoClient.endUserId("apple-alice"),
   });
   assert.equal(started.status, 200);
-  assert.equal((await started.json()).url, "https://connect.nango.dev/?t=tok");
+  assert.equal(
+    (await started.json()).url,
+    "https://nango.test/oauth/connect/outlook?connect_session_token=tok",
+  );
+  const stripe = await call(bob, "/api/connectors/stripe/connect", "POST");
+  assert.equal((await stripe.json()).url, "https://connect.nango.dev/?t=tok");
   assert.deepEqual(sessions[0].tags, { end_user_id: NangoClient.endUserId("apple-bob") });
   assert.deepEqual(sessions[0].allowed_integrations, ["outlook"]);
 
