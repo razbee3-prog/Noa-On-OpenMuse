@@ -40,8 +40,8 @@ export function AgentComputerButton() {
       clearInterval(timer);
     };
   }, [api, available]);
-  if (!available) return null;
   async function show() {
+    if (!available) return open({ type: "computer" });
     if (busy) return;
     setBusy(true);
     try {
@@ -57,11 +57,13 @@ export function AgentComputerButton() {
       <IconButton
         icon={Monitor}
         label={
-          needsYou
-            ? "Noa's computer, needs you to sign in"
-            : working
-              ? "Noa's computer, working now"
-              : "Noa's computer"
+          !available
+            ? "Noa's computer, offline"
+            : needsYou
+              ? "Noa's computer, needs you to sign in"
+              : working
+                ? "Noa's computer, working now"
+                : "Noa's computer"
         }
         onPress={() => void show()}
       />
