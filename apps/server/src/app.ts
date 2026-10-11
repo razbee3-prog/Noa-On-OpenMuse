@@ -426,6 +426,11 @@ export async function createApp(
     const body = z.object({ url: z.url().max(4096) }).parse(await c.req.json());
     return c.json(await browser.create(c.get("owner"), body.url), 201);
   });
+  app.get("/api/agent-browser", async (c) => {
+    const owner = c.get("owner");
+    const id = await browser.ownerSession(owner);
+    return c.json(browser.decorate(owner, await browser.get(owner, id)));
+  });
   app.get("/api/browsers/:id", async (c) => {
     const owner = c.get("owner");
     return c.json(browser.decorate(owner, await browser.get(owner, c.req.param("id"))));
