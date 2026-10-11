@@ -131,6 +131,13 @@ export const slackMessageSchema = z.object({
   text: z.string().min(1).max(4000),
   threadTs: z.string().max(64).optional(),
 });
+export const browserActionSchema = z.object({
+  site: z.string().min(1).max(100),
+  url: z.url().max(4096),
+  action: z.enum(["click", "press"]),
+  target: z.string().min(1).max(200),
+  summary: z.string().min(1).max(500),
+});
 export const proposalSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("email.send"), data: emailDraftSchema }),
   z.object({ kind: z.literal("calendar.create"), data: eventDraftSchema }),
@@ -145,18 +152,22 @@ export const proposalSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("outlook.email.send"), data: emailDraftSchema }),
   z.object({ kind: z.literal("outlook.calendar.create"), data: eventDraftSchema }),
   z.object({ kind: z.literal("slack.message.send"), data: slackMessageSchema }),
+  z.object({ kind: z.literal("browser.action"), data: browserActionSchema }),
 ]);
-export type ProposalProvider = "google" | "outlook" | "slack";
+export type ProposalProvider = "google" | "outlook" | "slack" | "browser";
 export function proposalProvider(kind: string): ProposalProvider {
   if (kind.startsWith("outlook.")) return "outlook";
   if (kind.startsWith("slack.")) return "slack";
+  if (kind.startsWith("browser.")) return "browser";
   return "google";
 }
 export const proposalProviderLabel: Record<ProposalProvider, string> = {
   google: "Google",
   outlook: "Outlook",
   slack: "Slack",
+  browser: "Browser",
 };
+export type BrowserActionDraft = z.infer<typeof browserActionSchema>;
 export type SlackMessageDraft = z.infer<typeof slackMessageSchema>;
 export type EmailDraft = z.infer<typeof emailDraftSchema>;
 export type EventDraft = z.infer<typeof eventDraftSchema>;

@@ -44,6 +44,13 @@ export async function createBrowserFixture(options: { host?: string; port?: numb
       body = `<script>localStorage.setItem("openmuse-profile-test", "retained");</script>`;
     else if (path === "/state")
       body = `<script>document.body.textContent = localStorage.getItem("openmuse-profile-test") ?? "missing";</script>`;
+    else if (path === "/login")
+      body = `<form onsubmit="event.preventDefault();document.cookie='fixture_session=1; path=/; max-age=86400';location.href='/inbox'"><label>Email <input id="email"></label><label>Password <input id="password" type="password"></label><button>Sign in</button></form>`;
+    else if (path === "/inbox")
+      body = `<script>if(!document.cookie.includes("fixture_session=1"))location.replace("/login")</script><h1>Messages</h1><p>Dana Lee: Are we still on for lunch Thursday?</p><form role="search" onsubmit="event.preventDefault()"><label>Search messages <input type="search"></label></form><label>Message <input id="message"></label><label>Card number <input id="card"></label><button onclick="fetch('/sent')">Send</button>`;
+    else if (path === "/sent") body = "sent";
+    else if (path === "/blocked")
+      body = "<h1>Verify you are human</h1><p>Complete the security check to continue.</p>";
     else if (path === "/favicon.ico") {
       response.writeHead(204);
       response.end();

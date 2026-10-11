@@ -24,6 +24,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Linking, Pressable, Text, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+import { z } from "zod";
 import type { Artifact, BrowserSession } from "../../../packages/domain/src";
 import type {
   AgentArtifact,
@@ -37,6 +38,7 @@ import type {
 } from "../../../packages/domain/src/agent";
 import { useAgentWorkspace } from "./agent-workspace";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
+import { SignInPanel } from "./sign-in-card";
 import {
   Button,
   Card,
@@ -365,6 +367,10 @@ export function TaskDetail({ taskId }: { taskId: string }) {
     }
   }
   const missing = Array.isArray(task?.state.missingFields) ? task.state.missingFields : [];
+  const signInState = z
+    .object({ site: z.string(), reason: z.string(), sessionId: z.string() })
+    .safeParse(task?.state.signIn);
+  const signIn = signInState.success ? signInState.data : undefined;
   const fieldNames = missing
     .map((field) =>
       typeof field === "string"
@@ -451,7 +457,20 @@ export function TaskDetail({ taskId }: { taskId: string }) {
               </Button>
             </Card>
           )}
-          {task.status === "waiting_input" && (
+          {task.status === "waiting_input" && signIn && (
+            <SignInPanel
+              site={signIn.site}
+              reason={signIn.reason}
+              sessionId={signIn.sessionId}
+              onConfirm={() =>
+                act("input", {
+                  answer: `I've signed in to ${signIn.site}. Please continue.`,
+                  fields: {},
+                })
+              }
+            />
+          )}
+          {task.status === "waiting_input" && !signIn && (
             <Card style={{ backgroundColor: colors.sky, gap: 10 }}>
               <Text style={s.heading}>{task.question || "A detail from you will help"}</Text>
               {fieldNames.map((name) =>

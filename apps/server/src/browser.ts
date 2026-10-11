@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import type { BrowserSession } from "../../../packages/domain/src/index.ts";
+import type { BrowserActionDraft, BrowserSession } from "../../../packages/domain/src/index.ts";
 import type { Auth } from "./auth.ts";
 import { browserConsole } from "./browser-console.ts";
 import type { Config } from "./config.ts";
@@ -28,7 +28,17 @@ const failureSchema = z.object({
   message: z.string(),
   createdAt: z.string(),
 });
+const actSchema = z.object({
+  url: z.string(),
+  title: z.string(),
+  text: z.string(),
+  truncated: z.boolean(),
+  controls: z.array(z.string()),
+  signInRequired: z.boolean(),
+  blocked: z.boolean(),
+});
 type ChatBrowser = { id: string; sessionId: string };
+const OWNER_PROFILE = "owner-profile";
 
 const BROWSER_SESSION_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -205,18 +215,16 @@ export class BrowserService {
       return { sessionId: id, ...(await this.readOwned(owner, id, signal)) };
     });
   }
-  async observeForThread(owner: string, threadId: string, url: string, signal?: AbortSignal) {
-    signal?.throwIfAborted();
-    // Persist the association before contacting the worker so failed/lost responses
-    // and later chat turns keep using the same profile instead of exhausting its limit.
+  /** One saved browser profile per owner, shared by every chat and task so a sign-in carries over. */
+  async ownerSession(owner: string, url = "about:blank") {
     const association =
-      (await this.db.get<ChatBrowser>(owner, "chat-browsers", threadId)) ??
+      (await this.db.get<ChatBrowser>(owner, "chat-browsers", OWNER_PROFILE)) ??
       (await this.db.insertIfAbsent(owner, "chat-browsers", {
-        id: threadId,
+        id: OWNER_PROFILE,
         sessionId: randomUUID(),
       })) ??
-      (await this.db.get<ChatBrowser>(owner, "chat-browsers", threadId));
-    if (!association) throw new AppError("Could not reserve the chat browser session", 500);
+      (await this.db.get<ChatBrowser>(owner, "chat-browsers", OWNER_PROFILE));
+    if (!association) throw new AppError("Could not reserve the browser session", 500);
     const id = association.sessionId;
     await this.db.insertIfAbsent(owner, "browsers", {
       id,
@@ -225,6 +233,13 @@ export class BrowserService {
       status: "idle",
       updatedAt: new Date().toISOString(),
     });
+    return id;
+  }
+  async observeForOwner(owner: string, url: string, signal?: AbortSignal) {
+    signal?.throwIfAborted();
+    // Persist the association before contacting the worker so failed/lost responses
+    // and later turns keep using the same profile instead of exhausting its limit.
+    const id = await this.ownerSession(owner, url);
     return this.serial(id, async () => {
       signal?.throwIfAborted();
       await this.openOwned(owner, id, url, signal);
@@ -238,6 +253,51 @@ export class BrowserService {
         truncated: page.truncated || page.text.length > 30_000,
       };
     });
+  }
+  /** Runs one agent action on the owner's shared browser, reopening the saved profile if it idled out. */
+  async act(owner: string, action: Record<string, unknown>, signal?: AbortSignal) {
+    const id = await this.ownerSession(owner);
+    return this.serial(id, async () => {
+      const send = async () =>
+        actSchema.parse(
+          await (
+            await this.request(`/sessions/${encodeURIComponent(id)}/act`, action, signal)
+          ).json(),
+        );
+      let result: z.infer<typeof actSchema>;
+      try {
+        result = await send();
+      } catch (error) {
+        if (!(error instanceof AppError && /Open this browser session/.test(error.message)))
+          throw error;
+        await this.openOwned(owner, id, undefined, signal);
+        result = await send();
+      }
+      return { sessionId: id, ...result };
+    });
+  }
+  /** Runs a browser step the user approved on a review card, only on the page it was approved for. */
+  async runReviewed(owner: string, draft: BrowserActionDraft) {
+    const current = await this.act(owner, { type: "read" });
+    const here = new URL(current.url);
+    const approved = new URL(draft.url);
+    if (here.origin !== approved.origin || here.pathname !== approved.pathname)
+      throw new AppError(
+        `The browser moved to a different page than the one you approved (${draft.site}). Ask Noa to prepare the step again.`,
+        409,
+      );
+    const after = await this.act(owner, {
+      type: draft.action,
+      ...(draft.action === "click" ? { target: draft.target } : { key: "Enter" }),
+      reviewed: true,
+    });
+    return `${draft.site} · ${draft.summary} · now at ${after.url}`;
+  }
+  /** Opens a page in the owner's shared browser and returns what the agent can see and do there. */
+  async openForAgent(owner: string, url: string, signal?: AbortSignal) {
+    const id = await this.ownerSession(owner, url);
+    await this.serial(id, () => this.openOwned(owner, id, url, signal));
+    return this.act(owner, { type: "read" }, signal);
   }
   async close(owner: string, id: string) {
     return this.serial(id, async () => {

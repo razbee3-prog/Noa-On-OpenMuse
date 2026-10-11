@@ -33,6 +33,42 @@ export function validateSessionId(id: unknown): string {
   return id.toLowerCase();
 }
 
+const RISKY_ACTION =
+  /\b(send|post|publish|submit|pay|purchase|buy|checkout|order|book|reserve|delete|remove|unsubscribe|transfer|confirm|reply|apply|save|update|settings)\b/i;
+const SENSITIVE_FIELD =
+  /pass|otp|one.?time|2fa|mfa|verification|security code|cvc|cvv|card|ssn|social security|\bpin\b/i;
+const CARD_NUMBER = /\b(?:\d[ -]?){13,19}\b/;
+const BLOCKED_PAGE =
+  /captcha|verify (that )?you are (a )?human|are you a robot|unusual traffic|security check|access denied|automated (queries|access)|checking your browser|press (and|&) hold/i;
+const CHALLENGE_FRAME =
+  /recaptcha|hcaptcha|challenges\.cloudflare|turnstile|arkoselabs|funcaptcha/i;
+export type BrowserAction =
+  | { type: "click"; target: string; reviewed?: boolean }
+  | { type: "type"; field: string; text: string }
+  | { type: "press"; key: "Enter"; reviewed?: boolean }
+  | { type: "scroll"; direction: "up" | "down" }
+  | { type: "back" }
+  | { type: "read" };
+
+export function parseBrowserAction(value: Record<string, unknown>): BrowserAction {
+  const text = (key: string, max: number) => {
+    const item = value[key];
+    if (typeof item !== "string" || !item.trim() || item.length > max)
+      throw new WorkerError("INVALID_INPUT", `A ${key} of at most ${max} characters is required.`);
+    return item;
+  };
+  const reviewed = value.reviewed === true;
+  if (value.type === "click") return { type: "click", target: text("target", 200), reviewed };
+  if (value.type === "type")
+    return { type: "type", field: text("field", 200), text: text("text", 2000) };
+  if (value.type === "press" && value.key === "Enter")
+    return { type: "press", key: "Enter", reviewed };
+  if (value.type === "scroll" && (value.direction === "up" || value.direction === "down"))
+    return { type: "scroll", direction: value.direction };
+  if (value.type === "back" || value.type === "read") return { type: value.type };
+  throw new WorkerError("INVALID_INPUT", "Unsupported browser action.");
+}
+
 export async function createBrowserManager(
   options: {
     dataDir: string;
@@ -177,6 +213,28 @@ export async function createBrowserManager(
     const tempDirectory = join("/tmp", `openmuse-downloads-${id}`);
     await mkdir(profileDir, { recursive: true, mode: 0o700 });
     await mkdir(tempDirectory, { recursive: true, mode: 0o700 });
+    // Never let Chromium save passwords, card numbers or form entries typed in Take control.
+    await mkdir(join(profileDir, "Default"), { recursive: true, mode: 0o700 });
+    const preferencesPath = join(profileDir, "Default", "Preferences");
+    let preferences: Record<string, unknown> = {};
+    try {
+      preferences = JSON.parse(await readFile(preferencesPath, "utf8"));
+    } catch {
+      /* A new profile has no preferences yet. */
+    }
+    await writeFile(
+      preferencesPath,
+      JSON.stringify({
+        ...preferences,
+        credentials_enable_service: false,
+        profile: {
+          ...(preferences.profile as Record<string, unknown> | undefined),
+          password_manager_enabled: false,
+        },
+        autofill: { profile_enabled: false, credit_card_enabled: false, enabled: false },
+      }),
+      { mode: 0o600 },
+    );
     let context: BrowserContext;
     try {
       const { chromium } = await import("playwright");
@@ -190,7 +248,9 @@ export async function createBrowserManager(
         headless: true,
         viewport: { width: 1280, height: 800 },
         proxy: { server: proxy.url, bypass: "<-loopback>" },
-        serviceWorkers: "block",
+        // Service-worker fetches skip context.route, but still go through the egress proxy
+        // and the host-resolver rule, which block private destinations.
+        serviceWorkers: "allow",
         acceptDownloads: true,
         downloadsPath: tempDirectory,
         timeout: 25_000,
@@ -228,7 +288,14 @@ export async function createBrowserManager(
           await route.abort("blockedbyclient").catch(() => {});
         }
       });
-      await context.routeWebSocket("**/*", (socket) => socket.close());
+      await context.routeWebSocket("**/*", async (socket) => {
+        try {
+          await validatePublicUrl(socket.url().replace(/^ws/, "http"));
+          socket.connectToServer();
+        } catch {
+          await socket.close().catch(() => {});
+        }
+      });
       for (const old of context.pages()) await old.close();
       const page = await context.newPage();
       page.setDefaultTimeout(10_000);
@@ -365,6 +432,164 @@ export async function createBrowserManager(
           await page.mouse.wheel(0, deltaY);
         else throw new WorkerError("INVALID_INPUT", "Unsupported browser input or coordinates.");
         return refresh(id);
+      }),
+    act: (id: string, raw: Record<string, unknown>) =>
+      serial(id, async () => {
+        const action = parseBrowserAction(raw);
+        const { page } = active(id);
+        if (page.url() !== "about:blank") await validatePublicUrl(page.url());
+        const reviewRequired = (name: string) =>
+          new WorkerError(
+            "REVIEW_REQUIRED",
+            `“${name.slice(0, 80)}” could send, submit or change something. Prepare a review card first.`,
+            409,
+          );
+        if (action.type === "click") {
+          const target = page
+            .getByRole("button", { name: action.target })
+            .or(page.getByRole("link", { name: action.target }))
+            .or(page.getByText(action.target))
+            .first();
+          const info = await target
+            .evaluate((element) => {
+              const control = element as HTMLButtonElement;
+              const form = control.closest("form");
+              const name = (
+                control.getAttribute("aria-label") ||
+                control.textContent ||
+                control.value ||
+                ""
+              ).trim();
+              const submits =
+                !!form &&
+                (control.tagName === "BUTTON" || control.type === "submit") &&
+                control.type !== "button";
+              const search =
+                !!form &&
+                (form.getAttribute("role") === "search" ||
+                  !!form.querySelector("input[type=search]"));
+              return { name, submits: submits && !search };
+            })
+            .catch(() => {
+              throw new WorkerError(
+                "TARGET_NOT_FOUND",
+                `Nothing labelled “${action.target}” is on the page.`,
+                404,
+              );
+            });
+          if (!action.reviewed && (RISKY_ACTION.test(info.name) || info.submits))
+            throw reviewRequired(info.name || action.target);
+          await target.click({ timeout: 10_000 });
+        } else if (action.type === "type") {
+          const field = page
+            .getByLabel(action.field)
+            .or(page.getByPlaceholder(action.field))
+            .or(page.getByRole("textbox", { name: action.field }))
+            .first();
+          const info = await field
+            .evaluate((element) => {
+              const input = element as HTMLInputElement;
+              return [
+                input.type,
+                input.autocomplete,
+                input.name,
+                input.id,
+                input.getAttribute("aria-label") ?? "",
+                input.placeholder ?? "",
+                input.labels?.[0]?.textContent ?? "",
+              ];
+            })
+            .catch(() => {
+              throw new WorkerError(
+                "TARGET_NOT_FOUND",
+                `No field labelled “${action.field}” is on the page.`,
+                404,
+              );
+            });
+          const [type, autocomplete] = info;
+          if (
+            type === "password" ||
+            /one-time-code|cc-|current-password|new-password/.test(autocomplete ?? "") ||
+            SENSITIVE_FIELD.test(`${action.field} ${info.slice(2).join(" ")}`) ||
+            CARD_NUMBER.test(action.text)
+          )
+            throw new WorkerError(
+              "SENSITIVE_FIELD",
+              "This field takes a password, code or card number. The user must type it in Take control.",
+              422,
+            );
+          await field.fill(action.text, { timeout: 10_000 });
+        } else if (action.type === "press") {
+          const search = await page.evaluate(() => {
+            const focused = document.activeElement as HTMLInputElement | null;
+            if (!focused) return false;
+            const label = `${focused.type} ${focused.getAttribute("role") ?? ""} ${focused.name} ${focused.placeholder ?? ""} ${focused.getAttribute("aria-label") ?? ""}`;
+            return /search/i.test(label);
+          });
+          if (!search && !action.reviewed) throw reviewRequired("Enter");
+          await page.keyboard.press("Enter");
+        } else if (action.type === "scroll") {
+          await page.mouse.wheel(0, action.direction === "down" ? 700 : -700);
+        } else if (action.type === "back") {
+          await page.goBack({ waitUntil: "domcontentloaded", timeout: 20_000 }).catch(() => null);
+        }
+        await page.waitForLoadState("domcontentloaded", { timeout: 10_000 }).catch(() => {});
+        if (page.url() !== "about:blank") await validatePublicUrl(page.url());
+        // A click or Enter can start a navigation after the action resolves; retry the
+        // read once the new document exists instead of failing the action.
+        const snapshot = () =>
+          page.evaluate(() => {
+            const visible = (element: Element) => {
+              const box = element.getBoundingClientRect();
+              return box.width > 0 && box.height > 0;
+            };
+            const controls = Array.from(
+              document.querySelectorAll("a[href],button,input,textarea,select,[role=button]"),
+            )
+              .filter(visible)
+              .slice(0, 80)
+              .map((element) => {
+                const input = element as HTMLInputElement;
+                const label =
+                  element.getAttribute("aria-label") ||
+                  input.labels?.[0]?.textContent ||
+                  input.placeholder ||
+                  element.textContent ||
+                  input.value ||
+                  "";
+                return `${element.tagName.toLowerCase()}${input.type ? `[${input.type}]` : ""}: ${label.trim().replace(/\s+/g, " ").slice(0, 80)}`;
+              });
+            const text = document.body?.innerText ?? "";
+            return {
+              url: location.href,
+              title: document.title.slice(0, 300),
+              text: text.slice(0, 30_000),
+              truncated: text.length > 30_000,
+              controls,
+              signInRequired: Array.from(document.querySelectorAll("input[type=password]")).some(
+                visible,
+              ),
+            };
+          });
+        let result: Awaited<ReturnType<typeof snapshot>> | undefined;
+        for (let attempt = 0; !result; attempt++) {
+          try {
+            result = await snapshot();
+          } catch (error) {
+            if (
+              attempt >= 4 ||
+              !(error instanceof Error && /context was destroyed|navigat/i.test(error.message))
+            )
+              throw error;
+            await page.waitForLoadState("domcontentloaded", { timeout: 10_000 }).catch(() => {});
+          }
+        }
+        if (page.url() !== "about:blank") await validatePublicUrl(page.url());
+        const blocked =
+          BLOCKED_PAGE.test(`${result.title} ${result.text.slice(0, 5000)}`) ||
+          page.frames().some((frame) => CHALLENGE_FRAME.test(frame.url()));
+        await refresh(id);
+        return { ...result, blocked };
       }),
     downloads: async (id: string) => {
       const saved = await downloads(id);
