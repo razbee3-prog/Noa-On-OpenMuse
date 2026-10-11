@@ -64,7 +64,7 @@ const appleToken = (sub: string, audience = AUDIENCE) =>
     .setExpirationTime("10m")
     .sign(signKey);
 
-async function server(owner?: string) {
+async function server(owner?: string, inviteRequired = true) {
   const docker = fixture({ command: async () => ok("ran"), owner });
   const created = await createApp(
     db,
@@ -75,6 +75,7 @@ async function server(owner?: string) {
       workerToken: "w".repeat(32),
       accessKey: "admin-access-key-for-tests-only",
       trustProxy: true,
+      inviteRequired,
     },
     { docker: docker.runner, appleVerifier: verify },
   );
@@ -291,4 +292,14 @@ test("browser sessions are limited per account", async () => {
   assert.equal((await open(carol)).status, 201);
   assert.equal((await open(carol)).status, 409, "a third active session is refused");
   assert.equal((await open(dave)).status, 201, "another account still gets a session");
+});
+
+test("with INVITE_REQUIRED off, Apple sign-in creates an account without a code", async () => {
+  const { app } = await server(undefined, false);
+  const health = await (await app.request("/api/health")).json();
+  assert.equal(health.inviteRequired, false);
+  const first = await appleSignIn(app, { identityToken: await appleToken("apple-open") });
+  assert.equal(first.status, 200);
+  const again = await appleSignIn(app, { identityToken: await appleToken("apple-open") });
+  assert.equal(again.status, 200);
 });

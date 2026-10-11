@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { readApiPayload } from "./api-response";
 
@@ -61,4 +62,22 @@ export async function sessionStillValid(token: string) {
   } catch {
     return true;
   }
+}
+
+/** Whether new accounts need an invite code (server INVITE_REQUIRED). Defaults to false. */
+export function useInviteRequired() {
+  const [required, setRequired] = useState(false);
+  useEffect(() => {
+    let active = true;
+    fetch(`${API_URL}/api/health`)
+      .then((response) => response.json())
+      .then((health: { inviteRequired?: boolean }) => {
+        if (active) setRequired(health.inviteRequired === true);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+  return required;
 }
