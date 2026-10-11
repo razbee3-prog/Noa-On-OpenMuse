@@ -429,7 +429,10 @@ export async function createApp(
   app.get("/api/agent-browser", async (c) => {
     const owner = c.get("owner");
     const id = await browser.ownerSession(owner);
-    return c.json(browser.decorate(owner, await browser.get(owner, id)));
+    return c.json({
+      ...browser.decorate(owner, await browser.get(owner, id)),
+      needsYou: (await browser.pendingHelp(owner)) ?? null,
+    });
   });
   app.get("/api/browsers/:id", async (c) => {
     const owner = c.get("owner");

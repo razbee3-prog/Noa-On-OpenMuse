@@ -292,3 +292,34 @@ test("browser sessions are limited per account", async () => {
   assert.equal((await open(carol)).status, 409, "a third active session is refused");
   assert.equal((await open(dave)).status, 201, "another account still gets a session");
 });
+
+test("each account sees only its own agent computer", async () => {
+  const { app } = await server();
+  const alice = await member(app, "apple-alice-pc", "Alice");
+  const bob = await member(app, "apple-bob-pc", "Bob");
+  const mine = await (await app.request("/api/agent-browser", { headers: json(alice) })).json();
+  const again = await (await app.request("/api/agent-browser", { headers: json(alice) })).json();
+  const theirs = await (await app.request("/api/agent-browser", { headers: json(bob) })).json();
+  assert.equal(mine.id, again.id);
+  assert.notEqual(mine.id, theirs.id);
+  const peek = await app.request(`/api/browsers/${mine.id}`, { headers: json(bob) });
+  assert.equal(peek.status, 404);
+});
+
+test("the agent computer shows when Noa needs you, only to that account", async () => {
+  const { app } = await server();
+  const alice = await member(app, "apple-alice-help", "Alice");
+  const bob = await member(app, "apple-bob-help", "Bob");
+  const read = async (headers: Record<string, string>) =>
+    (await (await app.request("/api/agent-browser", { headers })).json()).needsYou;
+  assert.equal(await read(json(alice)), null);
+  await db.put(appleOwnerId("apple-alice-help"), "agent-help", {
+    id: "owner-profile",
+    site: "LinkedIn",
+    reason: "Sign in to read your messages",
+    askedAt: new Date().toISOString(),
+    resolved: false,
+  });
+  assert.equal((await read(json(alice))).site, "LinkedIn");
+  assert.equal(await read(json(bob)), null);
+});

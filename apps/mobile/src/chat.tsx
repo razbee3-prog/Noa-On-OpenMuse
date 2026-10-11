@@ -44,6 +44,7 @@ import { SignInToolCard } from "./sign-in-card";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
 import { Button, Card, CheckRow, colors, ErrorNotice, s } from "./ui";
+import { VoiceInputButton } from "./voice-input";
 import { useWorkspace } from "./workspace";
 
 const displayParameters = z.record(z.string(), z.unknown());
@@ -1004,6 +1005,9 @@ export function ChatScreen({
                   : undefined
               }
             />
+            {!replying && (
+              <VoiceInputButton value={draft} onChange={setDraft} disabled={!loaded || !isReady} />
+            )}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={replying ? "Stop reply" : "Send message"}

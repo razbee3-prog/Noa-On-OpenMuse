@@ -82,7 +82,12 @@ export function browserAgentTools(
       name: "browser_read",
       description: `Read the page currently open in your browser. Use after the person signs in to confirm it worked. ${NOTE}`,
       parameters: z.object({}),
-      execute: () => act({ type: "read" }),
+      execute: async () => {
+        const result = await act({ type: "read" });
+        if ("signInRequired" in result && !result.signInRequired && !result.blocked)
+          await browser.resolveHelp(owner).catch(() => {});
+        return result;
+      },
     }),
     defineTool({
       name: "browser_click",
@@ -133,6 +138,7 @@ export function browserAgentTools(
         try {
           const page = await browser.openForAgent(owner, url, signal);
           const session = browser.decorate(owner, await browser.get(owner, page.sessionId));
+          await browser.askForHelp(owner, site, reason);
           return await hooks.requestSignIn({
             site,
             url: page.url,

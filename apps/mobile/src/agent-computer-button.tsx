@@ -1,29 +1,51 @@
 import { Monitor } from "lucide-react-native";
-import { useState } from "react";
-import { View } from "react-native";
+import { useEffect, useState } from "react";
+import { AppState, View } from "react-native";
 import type { BrowserSession } from "../../../packages/domain/src";
 import { useAgentWorkspace } from "./agent-workspace";
 import { colors, IconButton } from "./ui";
 import { useWorkspace } from "./workspace";
+
+type AgentBrowser = BrowserSession & { needsYou?: { site: string; reason: string } | null };
 
 /** Header shortcut to watch the agent's own browser live and take control of it. */
 export function AgentComputerButton() {
   const { api, workspace, open } = useWorkspace();
   const { data } = useAgentWorkspace();
   const [busy, setBusy] = useState(false);
+  const [askedForHelp, setAskedForHelp] = useState(false);
   const available = workspace.connections.some(
     (c) => c.id === "browser" && c.status === "connected",
   );
   const working = workspace.browsers.some((b) => b.status === "active");
-  const needsYou = !!data?.tasks.some(
-    (task) => task.status === "waiting_input" && !!task.state.signIn,
-  );
+  const needsYou =
+    askedForHelp ||
+    !!data?.tasks.some((task) => task.status === "waiting_input" && !!task.state.signIn);
+  useEffect(() => {
+    if (!available) return;
+    let active = true;
+    const check = () => {
+      if (AppState.currentState !== "active") return;
+      api
+        .request<AgentBrowser>("/api/agent-browser")
+        .then((session) => {
+          if (active) setAskedForHelp(!!session.needsYou);
+        })
+        .catch(() => {});
+    };
+    check();
+    const timer = setInterval(check, 8000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [api, available]);
   if (!available) return null;
   async function show() {
     if (busy) return;
     setBusy(true);
     try {
-      open({ type: "browser", browser: await api.request<BrowserSession>("/api/agent-browser") });
+      open({ type: "browser", browser: await api.request<AgentBrowser>("/api/agent-browser") });
     } catch {
       open({ type: "computer" });
     } finally {

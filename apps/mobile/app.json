@@ -34,7 +34,15 @@
       "@config-plugins/react-native-blob-util",
       "@config-plugins/react-native-pdf",
       "expo-apple-authentication",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Noa uses the microphone so you can speak your message instead of typing it.",
+          "speechRecognitionPermission": "Noa turns what you say into text in the message box. Nothing is sent until you tap send.",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+        }
+      ]
     ],
     "owner": "raz-team",
     "icon": "./assets/icon.png",

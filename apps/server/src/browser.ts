@@ -39,6 +39,8 @@ const actSchema = z.object({
 });
 type ChatBrowser = { id: string; sessionId: string };
 const OWNER_PROFILE = "owner-profile";
+const HELP_TTL_MS = 60 * 60 * 1000;
+type AgentHelp = { id: string; site: string; reason: string; askedAt: string; resolved: boolean };
 
 const BROWSER_SESSION_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -234,6 +236,27 @@ export class BrowserService {
       updatedAt: new Date().toISOString(),
     });
     return id;
+  }
+  /** Marks that the agent is stuck and needs the person to take control of its browser. */
+  async askForHelp(owner: string, site: string, reason: string) {
+    await this.db.put<AgentHelp>(owner, "agent-help", {
+      id: OWNER_PROFILE,
+      site,
+      reason,
+      askedAt: new Date().toISOString(),
+      resolved: false,
+    });
+  }
+  async resolveHelp(owner: string) {
+    const help = await this.db.get<AgentHelp>(owner, "agent-help", OWNER_PROFILE);
+    if (help && !help.resolved)
+      await this.db.put<AgentHelp>(owner, "agent-help", { ...help, resolved: true });
+  }
+  async pendingHelp(owner: string) {
+    const help = await this.db.get<AgentHelp>(owner, "agent-help", OWNER_PROFILE);
+    if (!help || help.resolved || Date.now() - Date.parse(help.askedAt) > HELP_TTL_MS)
+      return undefined;
+    return { site: help.site, reason: help.reason, askedAt: help.askedAt };
   }
   async observeForOwner(owner: string, url: string, signal?: AbortSignal) {
     signal?.throwIfAborted();
