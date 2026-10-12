@@ -14,6 +14,24 @@ test("a reply with --- lines shows as separate messages", () => {
   assert.deepEqual(splitReply(""), []);
 });
 
+test("a long reply without --- still splits into a few whole-paragraph texts", () => {
+  const a =
+    "Your October card spend is $2,140, about $300 over your usual month. Most of the jump is travel: the LA flights and the rental car.";
+  const b =
+    "Three charges look worth a second look:\n\n- $89 Equinox, which you said you cancelled\n- $40 Hulu, billed twice\n- $12 Apple, new this month";
+  const c = "Want me to draft a dispute for the Hulu double charge?";
+  assert.deepEqual(splitReply(`${a}\n\n${b}\n\n${c}`), [a, b, c]);
+  assert.deepEqual(splitReply("Short.\n\nStill short."), ["Short.\n\nStill short."]);
+  const table = `${a}\n\n| Month | Spend |\n| --- | --- |\n| Oct | $2,140 |\n\n${c} ${a}`;
+  assert.equal(splitReply(table).length, 1);
+  const many = Array.from({ length: 6 }, (_, i) => `Point ${i}: ${"word ".repeat(30).trim()}`).join(
+    "\n\n",
+  );
+  const parts = splitReply(many);
+  assert.equal(parts.length, 3);
+  assert.equal(parts.join("\n\n"), many);
+});
+
 test("connect offers name the service and default to no browser alternative", () => {
   assert.deepEqual(connectOffer("google", "To read your email"), {
     kind: "connect",
