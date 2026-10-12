@@ -45,7 +45,6 @@ import {
   sessionStillValid,
 } from "./src/api";
 import { ChatScreen, WorkspaceTools } from "./src/chat";
-import { ComputerEntry } from "./src/computer";
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
@@ -453,11 +452,6 @@ function WorkspaceShell({
               )}
             </View>
           </View>
-          {section === "chat" && (
-            <View style={{ alignItems: "center", paddingBottom: 4 }}>
-              <ComputerEntry />
-            </View>
-          )}
           <View style={{ flex: 1, minHeight: 0 }}>
             {section !== "chat" && (
               <ScrollView

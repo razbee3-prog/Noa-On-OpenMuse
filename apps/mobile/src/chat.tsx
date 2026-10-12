@@ -552,6 +552,7 @@ export function ChatScreen({
     setInputHeight(44);
     setAttachments([]);
     setPicking(false);
+    Keyboard.dismiss();
   }
   const messages = agent.messages || [];
   const latestPanelId = latestJevPanelId(messages, threadId);
@@ -647,19 +648,20 @@ export function ChatScreen({
                   : message.content
                 : "";
             const toolCalls = "toolCalls" in message ? message.toolCalls || [] : [];
-            const long = !user && (text.length > 320 || /\n\s*\|/.test(text));
+            const isTable = (part: string) => /\n\s*\||```/.test(part);
+            const long = !user && isTable(text);
             return (
               <View
                 key={message.id}
                 style={{
                   alignSelf: user ? "flex-end" : "flex-start",
-                  maxWidth: user ? "80%" : long ? "100%" : "92%",
+                  maxWidth: user ? "80%" : long || toolCalls.length ? "100%" : "86%",
                   width: toolCalls.length || long ? "100%" : undefined,
                   gap: 8,
                 }}
               >
                 {(user ? [text].filter(Boolean) : splitReply(text)).map((part, index) => {
-                  const wide = !user && (part.length > 320 || /\n\s*\|/.test(part));
+                  const wide = !user && isTable(part);
                   return (
                     <View
                       // biome-ignore lint/suspicious/noArrayIndexKey: parts of one saved message never reorder
