@@ -37,6 +37,7 @@ import { SearchService } from "../search.ts";
 import type { WorkspaceService } from "../workspace.ts";
 import { analyzeSpending } from "./finance.ts";
 import { executeModelTask } from "./model.ts";
+import { appendDailyNote, pruneOldNotes } from "./notes.ts";
 import {
   countPageDiff,
   describePageDiff,
@@ -113,6 +114,7 @@ export class AgentService {
             );
           });
       await tidyDueMemories(this.db).catch((error) => backgroundFailure("tidy memory", error));
+      await pruneOldNotes(this.db).catch((error) => backgroundFailure("prune notes", error));
       for (const { owner, value } of await this.db.scan<{ id: string; lastIdeasAt?: string }>(
         "agent-settings",
       )) {
@@ -986,6 +988,7 @@ export class AgentService {
   private async publishOutcome(owner: string, saved: AgentTask) {
     const task = await this.getTask(owner, saved.id);
     if (task.status === "succeeded") {
+      await appendDailyNote(this.db, owner, `Finished: ${task.title}`).catch(() => {});
       await this.notify(
         owner,
         task.title,
