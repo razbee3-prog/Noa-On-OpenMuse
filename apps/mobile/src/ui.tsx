@@ -41,6 +41,9 @@ export const colors = {
   mascotSky: "#ECF5FA",
   mascotSand: "#FAF0DF",
   mascotLilac: "#F1ECF9",
+  mascotMint: "#E3F5EA",
+  mascotRose: "#FBE7EC",
+  mascotPeach: "#FDEBDD",
   progress: "#6AAEE0",
   financeCanvas: "#080B10",
   financeTile: "#1D2025",
@@ -624,12 +627,15 @@ export function Mascot({
   variant = "sky",
 }: {
   size?: number;
-  variant?: "sky" | "sand" | "lilac";
+  variant?: "sky" | "sand" | "lilac" | "mint" | "rose" | "peach";
 }) {
   const palette = {
     sky: colors.mascotSky,
     sand: colors.mascotSand,
     lilac: colors.mascotLilac,
+    mint: colors.mascotMint,
+    rose: colors.mascotRose,
+    peach: colors.mascotPeach,
   }[variant];
   return (
     <View accessibilityLabel="Capybara mascot" style={{ width: size, height: size }}>

@@ -39,6 +39,7 @@ import {
   SOUL_ID,
   saveFile,
 } from "./soul-memory.ts";
+import { specialistContext } from "./specialists.ts";
 import { tanstackAgent } from "./tanstack-agent.ts";
 
 function clipCalendarText(text: string, limit: number) {
@@ -68,13 +69,15 @@ export class ConversationAgent extends AbstractAgent {
       void Promise.all([
         personaContext(this.service.db, this.owner),
         peopleNames(this.service.db, this.owner),
+        specialistContext(this.service.db, this.owner, input.threadId),
       ])
         .then(
-          ([persona, names]) =>
+          ([persona, names, specialist]) =>
             persona +
             (names.length
               ? `\n\nPeople you keep pages on (use search_memory for details): ${names.join(", ")}.`
-              : ""),
+              : "") +
+            specialist,
         )
         .catch(() => "")
         .then((persona) => {

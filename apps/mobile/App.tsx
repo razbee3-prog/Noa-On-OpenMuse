@@ -5,12 +5,12 @@ import { StatusBar } from "expo-status-bar";
 import {
   Bell,
   Check,
-  Lightbulb,
   type LucideIcon,
   Menu,
   MessageCircle,
   PanelsTopLeft,
   Shapes,
+  Sparkles,
   SquareCheck,
   X,
 } from "lucide-react-native";
@@ -30,13 +30,7 @@ import {
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Section, Workspace } from "../../packages/domain/src";
 import { AgentComputerButton } from "./src/agent-computer-button";
-import {
-  AgentActivityScreen,
-  AgentStatus,
-  AppsScreen,
-  GoalsScreen,
-  IdeasScreen,
-} from "./src/agent-ui";
+import { AgentActivityScreen, AgentStatus, AppsScreen, GoalsScreen } from "./src/agent-ui";
 import { AgentWorkspaceProvider, useAgentWorkspace } from "./src/agent-workspace";
 import {
   API_URL,
@@ -54,6 +48,12 @@ import { tapHaptic } from "./src/haptics";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
 import { onSignedOut } from "./src/session-events";
 import { clearSession, loadSession, saveSession } from "./src/session-store";
+import {
+  SpecialistAvatar,
+  SpecialistsScreen,
+  specialistBadge,
+  useSpecialist,
+} from "./src/specialists";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
 import {
   Button,
@@ -71,13 +71,13 @@ import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
 const nav: { id: Section; label: string; icon: LucideIcon }[] = [
   { id: "chat", label: "Chat", icon: MessageCircle },
   { id: "activity", label: "Activity", icon: PanelsTopLeft },
-  { id: "ideas", label: "Ideas", icon: Lightbulb },
+  { id: "specialists", label: "Specialists", icon: Sparkles },
   { id: "goals", label: "Goals", icon: SquareCheck },
   { id: "apps", label: "Apps", icon: Shapes },
 ];
 const titles: Partial<Record<Section, { title: string; subtitle: string }>> = {
   activity: { title: "Activity", subtitle: "Plans, progress, decisions and results." },
-  ideas: { title: "Ideas", subtitle: "Useful next steps, grounded in your world." },
+  specialists: { title: "Specialists", subtitle: "Noas with one job each." },
   goals: {
     title: "Goals",
     subtitle: "Longer-term goals and things to keep an eye on.",
@@ -357,6 +357,9 @@ function WorkspaceShell({
     ) || data?.tasks.find((task) => task.status === "running");
   const savedName = data?.identity.name;
   const agentName = !savedName || savedName === "Noa on OpenMuse" ? "Noa" : savedName;
+  const specialist = useSpecialist(
+    richThreads && !threadsLoading && selection.id !== mainId ? selection.id : undefined,
+  );
   const status = activeTask
     ? activeTask.status === "waiting_approval"
       ? `Ready to review · ${activeTask.title}`
@@ -380,8 +383,8 @@ function WorkspaceShell({
             ? FilesScreen
             : section === "activity"
               ? AgentActivityScreen
-              : section === "ideas"
-                ? IdeasScreen
+              : section === "specialists"
+                ? SpecialistsScreen
                 : section === "goals"
                   ? GoalsScreen
                   : AppsScreen;
@@ -519,7 +522,15 @@ function WorkspaceShell({
                       opacity: pressed ? 0.7 : 1,
                     })}
                   >
-                    <Mascot size={58} variant={data?.identity.avatar} />
+                    {specialist ? (
+                      <SpecialistAvatar
+                        size={58}
+                        look={specialist.mascot}
+                        badge={specialistBadge(specialist)}
+                      />
+                    ) : (
+                      <Mascot size={58} variant={data?.identity.avatar} />
+                    )}
                     <View
                       style={{
                         marginTop: -8,
@@ -544,13 +555,15 @@ function WorkspaceShell({
                           letterSpacing: -0.2,
                         }}
                       >
-                        {agentName}
+                        {specialist?.name ?? agentName}
                       </Text>
-                      {section === "chat" && !!status && (
-                        <Text numberOfLines={1} style={{ fontSize: 12, color: colors.muted }}>
-                          {status}
-                        </Text>
-                      )}
+                      {section === "chat" &&
+                        !!status &&
+                        !(specialist && status === "Side chat") && (
+                          <Text numberOfLines={1} style={{ fontSize: 12, color: colors.muted }}>
+                            {status}
+                          </Text>
+                        )}
                     </View>
                   </Pressable>
                 </View>

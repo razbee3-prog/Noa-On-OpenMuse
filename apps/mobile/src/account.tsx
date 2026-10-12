@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Linking, Platform, Text } from "react-native";
 import { API_URL } from "./api";
 import { signOutLocally } from "./session-store";
-import { Button, Card, ErrorNotice, Field, s } from "./ui";
+import { Button, Card, ErrorNotice, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
 interface AccountInfo {
@@ -12,55 +12,31 @@ interface AccountInfo {
   role: "admin" | "member";
 }
 
-/** Display name, privacy policy, sign out, account deletion. */
+/** Signed-in identity, privacy policy, sign out, account deletion. */
 export function AccountCard() {
-  const { api, refresh, notify } = useWorkspace();
+  const { api } = useWorkspace();
   const [account, setAccount] = useState<AccountInfo>();
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
     api
       .request<AccountInfo>("/api/account", undefined, "GET")
-      .then((value) => {
-        setAccount(value);
-        setName(value.displayName);
-      })
+      .then(setAccount)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, [api]);
   async function run(task: () => Promise<void>) {
-    setBusy(true);
     setError("");
     try {
       await task();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
     }
   }
   if (!account) return error ? <ErrorNotice error={error} /> : null;
   return (
     <Card style={{ gap: 12 }}>
-      <Text style={[s.text, { fontWeight: "600" }]}>Your account</Text>
+      <Text style={[s.text, { fontWeight: "600" }]}>{account.displayName}</Text>
       {account.email ? <Text style={s.small}>{account.email}</Text> : null}
       <ErrorNotice error={error} />
-      <Field label="Display name" value={name} onChangeText={setName} maxLength={80} />
-      <Button
-        busy={busy}
-        disabled={!name.trim() || name.trim() === account.displayName}
-        onPress={() =>
-          void run(async () => {
-            setAccount(
-              await api.request<AccountInfo>("/api/account", { displayName: name }, "PUT"),
-            );
-            await refresh();
-            notify("Display name saved.");
-          })
-        }
-      >
-        Save name
-      </Button>
       <Button
         quiet
         onPress={() =>

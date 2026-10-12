@@ -26,6 +26,12 @@ import { ConnectorService } from "./connectors.ts";
 import type { Store } from "./db.ts";
 import { agentRoutes } from "./engine/routes.ts";
 import { AgentService } from "./engine/service.ts";
+import {
+  listSpecialists,
+  specialistPresets,
+  specialistRequestSchema,
+  startSpecialist,
+} from "./engine/specialists.ts";
 import { AppError } from "./errors.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
@@ -328,6 +334,30 @@ export async function createApp(
       }),
       201,
     );
+  });
+  app.get("/api/specialists", async (c) =>
+    c.json({
+      presets: specialistPresets,
+      specialists: await listSpecialists(db, c.get("owner")),
+    }),
+  );
+  app.post("/api/specialists", async (c) => {
+    const owner = c.get("owner");
+    const specialist = await startSpecialist(
+      db,
+      owner,
+      specialistRequestSchema.parse(await c.req.json()),
+    );
+    try {
+      await intelligence.getOrCreateThread({
+        threadId: specialist.id,
+        userId: owner,
+        agentId: "default",
+      });
+    } catch {
+      throw new AppError("This specialist isn't available right now. Try again in a moment.", 502);
+    }
+    return c.json(specialist);
   });
   app.get("/api/main-thread", async (c) => {
     const owner = c.get("owner");

@@ -60,6 +60,7 @@ import { JevInteractionContext, JevToolCard } from "./jev-tool-card";
 import { MailToolCard } from "./mail-tool-card";
 import { SearchToolCard } from "./search-tool-card";
 import { SignInToolCard } from "./sign-in-card";
+import { useSpecialist } from "./specialists";
 import { availableBubbles, nextReveal, type StagedMessage } from "./staged-reply";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
@@ -302,6 +303,7 @@ export function ChatScreen({
   // Replayed messages show before connectAgent returns; new turns wait until it does.
   const [syncing, setSyncing] = useState(false);
   const chrome = useChrome();
+  const specialist = useSpecialist(thread?.id);
   const [composerHeight, setComposerHeight] = useState(62);
   // Bubble counts revealed so far for replies that arrived while this screen watched.
   const [revealed, setRevealed] = useState<Record<string, number>>({});
@@ -645,24 +647,27 @@ export function ChatScreen({
                 maxWidth: 350,
               }}
             >
-              Your calm guide for money, career and taxes.
+              {specialist ? specialist.name : "Your calm guide for money, career and taxes."}
             </Text>
             <Text style={[s.muted, { maxWidth: 320, textAlign: "center", lineHeight: 23 }]}>
-              Ask anything, or start with one of these. I’ll explain, organize and plan, and show
-              where every number came from.
+              {specialist
+                ? `${specialist.blurb} Tell me where to start.`
+                : "Ask anything, or start with one of these. I’ll explain, organize and plan, and show where every number came from."}
             </Text>
-            <View style={{ width: "100%", maxWidth: 380, marginTop: 10, gap: 14 }}>
-              {starterPrompts.map((group) => (
-                <View key={group.area} style={{ gap: 7 }}>
-                  <Text style={[s.label, { textAlign: "center" }]}>{group.area}</Text>
-                  {group.prompts.map((prompt) => (
-                    <Button key={prompt} small onPress={() => enqueue(prompt)}>
-                      {prompt}
-                    </Button>
-                  ))}
-                </View>
-              ))}
-            </View>
+            {!specialist && (
+              <View style={{ width: "100%", maxWidth: 380, marginTop: 10, gap: 14 }}>
+                {starterPrompts.map((group) => (
+                  <View key={group.area} style={{ gap: 7 }}>
+                    <Text style={[s.label, { textAlign: "center" }]}>{group.area}</Text>
+                    {group.prompts.map((prompt) => (
+                      <Button key={prompt} small onPress={() => enqueue(prompt)}>
+                        {prompt}
+                      </Button>
+                    ))}
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         ) : (
           visible.map((message) => {

@@ -1,5 +1,3 @@
-import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system/legacy";
 import {
   ArrowUpRight,
   CalendarDays,
@@ -17,28 +15,20 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
-  Upload,
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
   Linking,
-  Platform,
   Pressable,
   Text,
   TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
-import type {
-  Artifact,
-  BrowserSession,
-  CalendarEvent,
-  EmailDraft,
-} from "../../../packages/domain/src";
+import type { BrowserSession, CalendarEvent, EmailDraft } from "../../../packages/domain/src";
 import { AccountCard } from "./account";
-import { API_URL } from "./api";
 import { browserAddress } from "./browser-address";
 import { localDateTime, startOfZonedDay, zonedInstant } from "./date-time";
 import {
@@ -941,58 +931,10 @@ export function BrowserScreen() {
   );
 }
 export function FilesScreen() {
-  const { workspace: w, api, refresh, open } = useWorkspace();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  async function upload() {
-    setError("");
-    setBusy(true);
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: "application/pdf",
-        copyToCacheDirectory: true,
-      });
-      if (result.canceled) return;
-      const file = result.assets[0];
-      let artifact: Artifact;
-      if (Platform.OS === "web") {
-        const form = new FormData();
-        if (!file.file)
-          throw new Error("The selected file could not be read. Please choose it again.");
-        form.append("file", file.file, file.name);
-        artifact = await api.request<Artifact>("/api/files", form);
-      } else {
-        const result = await FileSystem.uploadAsync(`${API_URL}/api/files`, file.uri, {
-          httpMethod: "POST",
-          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-          fieldName: "file",
-          mimeType: "application/pdf",
-          headers: { Authorization: `Bearer ${api.token}` },
-        });
-        const payload = JSON.parse(result.body);
-        if (result.status < 200 || result.status >= 300)
-          throw new Error(payload.error || "Could not import this PDF.");
-        artifact = payload;
-      }
-      await refresh();
-      open({ type: "file", file: artifact });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const { workspace: w, open } = useWorkspace();
   return (
     <View style={{ gap: 20 }}>
-      <View style={s.between}>
-        <Text style={[s.muted, { flex: 1, marginRight: 15 }]}>
-          Documents, with a little room to work.
-        </Text>
-        <Button primary icon={Upload} busy={busy} onPress={() => void upload()}>
-          Import PDF
-        </Button>
-      </View>
-      <ErrorNotice error={error} />
+      <Text style={s.muted}>Documents, with a little room to work.</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 18 }}>
         {w.files.map((f) => (
           <Pressable
