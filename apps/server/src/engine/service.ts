@@ -15,6 +15,7 @@ import {
   type Monitor,
   monitorInputSchema,
   type RunEvent,
+  reminderInputSchema,
 } from "../../../../packages/domain/src/agent.ts";
 import type {
   ActionProposal,
@@ -38,6 +39,7 @@ import type { WorkspaceService } from "../workspace.ts";
 import { analyzeSpending } from "./finance.ts";
 import { recordFeedback, reviewDueLessons } from "./lessons.ts";
 import { executeModelTask } from "./model.ts";
+import { appendDailyNote, pruneOldNotes } from "./notes.ts";
 import {
   countPageDiff,
   describePageDiff,
@@ -120,6 +122,7 @@ export class AgentService {
         await reviewDueLessons(this.db, (system, user) =>
           generateText(reviewModel, system, user),
         ).catch((error) => backgroundFailure("review lessons", error));
+      await pruneOldNotes(this.db).catch((error) => backgroundFailure("prune notes", error));
       for (const { owner, value } of await this.db.scan<{ id: string; lastIdeasAt?: string }>(
         "agent-settings",
       )) {
@@ -244,7 +247,15 @@ export class AgentService {
           ? ["Check the source", "Compare with the last observation", "Report a meaningful change"]
           : input.kind === "finance"
             ? ["Validate transactions", "Calculate the summary", "Save your tracker"]
-            : ["Understand the outcome", "Plan the work", "Use connected tools", "Return a result"];
+            : input.kind === "reminder"
+              ? ["Wait until the time", "Remind you"]
+              : [
+                  "Understand the outcome",
+                  "Plan the work",
+                  "Use connected tools",
+                  "Return a result",
+                ];
+    const reminder = input.kind === "reminder" ? reminderInputSchema.parse(input.input) : undefined;
     const task: AgentTask = {
       id,
       title: input.title ?? input.prompt.slice(0, 90),
@@ -252,7 +263,8 @@ export class AgentService {
       kind: input.kind,
       goalId: input.goalId,
       milestoneId: input.milestoneId,
-      status: held || goal?.status === "paused" ? "paused" : "queued",
+      status: held || goal?.status === "paused" ? "paused" : reminder ? "scheduled" : "queued",
+      ...(reminder ? { nextRunAt: new Date(reminder.at).toISOString() } : {}),
       plan: titles.map((title, i) => ({ id: String(i), title, status: "pending" })),
       evidence: [],
       input: input.input,
@@ -885,6 +897,7 @@ export class AgentService {
         );
       else return { status: "waiting_approval" };
     }
+    if (task.kind === "reminder") return this.remind(task, context);
     if (task.kind === "document") return this.document(owner, task, context);
     if (task.kind === "monitor") {
       try {
@@ -981,6 +994,24 @@ export class AgentService {
     }
     return executeModelTask(this, owner, task, context);
   }
+  private async remind(task: AgentTask, context: TaskContext): Promise<Partial<AgentTask>> {
+    const { at, repeat } = reminderInputSchema.parse(task.input);
+    if (repeat === "none") return this.finish(task, context, task.prompt);
+    const step = repeat === "daily" ? 86400000 : 7 * 86400000;
+    const due = task.nextRunAt ?? at;
+    let next = Date.parse(due) + step;
+    while (next <= Date.now()) next += step;
+    await context.guard();
+    await context.event("result", "Reminder sent", task.prompt);
+    return {
+      status: "scheduled",
+      nextRunAt: new Date(next).toISOString(),
+      state: {
+        ...task.state,
+        notice: { title: task.title, body: task.prompt, key: `reminder:${task.id}:${due}` },
+      },
+    };
+  }
   async finish(task: AgentTask, context: TaskContext, result: string) {
     await context.guard();
     await context.event("result", "Work completed", result);
@@ -993,6 +1024,7 @@ export class AgentService {
   private async publishOutcome(owner: string, saved: AgentTask) {
     const task = await this.getTask(owner, saved.id);
     if (task.status === "succeeded") {
+      await appendDailyNote(this.db, owner, `Finished: ${task.title}`).catch(() => {});
       await this.notify(
         owner,
         task.title,
