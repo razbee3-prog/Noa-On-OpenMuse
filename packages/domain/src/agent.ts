@@ -121,6 +121,13 @@ export interface AgentIdentity {
   avatar?: "sky" | "sand" | "lilac";
   showChatUpdates?: boolean;
 }
+export interface AgentFile {
+  id: "soul" | "memory-file";
+  text: string;
+  updatedAt: string;
+  updatedBy: "template" | "you" | "noa";
+  lastTidiedAt?: string;
+}
 export interface AgentWorkspace {
   tasks: AgentTask[];
   goals: Goal[];
@@ -130,6 +137,8 @@ export interface AgentWorkspace {
   artifacts: AgentArtifact[];
   notifications: AgentNotification[];
   identity: AgentIdentity;
+  soul?: AgentFile;
+  memoryFile?: AgentFile;
   worker: { running: boolean; lastTickAt?: string };
 }
 export const createTaskSchema = z.object({

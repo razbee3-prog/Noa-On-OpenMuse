@@ -9,6 +9,7 @@ import type {
 import { createTaskSchema } from "../../../../packages/domain/src/agent.ts";
 import { AppError } from "../errors.ts";
 import type { AgentService } from "./service.ts";
+import { loadMemory, loadSoul, MEMORY_ID, SOUL_ID, saveFile } from "./soul-memory.ts";
 
 const text = z.string().trim().min(1).max(4000);
 const memorySchema = z.object({ text, source: z.string().trim().min(1).max(200).optional() });
@@ -122,6 +123,16 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
     if (!(await service.db.take(c.get("owner"), "memories", c.req.param("id"))))
       throw new AppError("Memory not found", 404);
     return c.json({ ok: true });
+  });
+  app.get("/soul", async (c) => c.json(await loadSoul(service.db, c.get("owner"))));
+  app.get("/memory-file", async (c) => c.json(await loadMemory(service.db, c.get("owner"))));
+  app.post("/soul", async (c) => {
+    const { text } = z.object({ text: z.string().max(20000) }).parse(await c.req.json());
+    return c.json(await saveFile(service.db, c.get("owner"), SOUL_ID, text, "you"));
+  });
+  app.post("/memory-file", async (c) => {
+    const { text } = z.object({ text: z.string().max(40000) }).parse(await c.req.json());
+    return c.json(await saveFile(service.db, c.get("owner"), MEMORY_ID, text, "you"));
   });
   app.post("/identity", async (c) => {
     const body = z

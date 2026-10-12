@@ -7,10 +7,12 @@ import {
   CircleDollarSign,
   FileText,
   Globe2,
+  Heart,
   Lightbulb,
   ListChecks,
   type LucideIcon,
   Mail,
+  MessageSquare,
   Pause,
   Play,
   Plus,
@@ -45,6 +47,7 @@ import {
   CheckRow,
   Chip,
   colors,
+  dateLabel,
   Empty,
   ErrorNotice,
   Field,
@@ -1821,7 +1824,6 @@ export function AppsScreen() {
   const [tone, setTone] = useState(data?.identity.tone || "warm");
   const [avatar, setAvatar] = useState(data?.identity.avatar || "sky");
   const [showChatUpdates, setShowChatUpdates] = useState(data?.identity.showChatUpdates !== false);
-  const [memory, setMemory] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -1842,7 +1844,6 @@ export function AppsScreen() {
     setError("");
     try {
       await mutate(path, body);
-      if (path === "/memories") setMemory("");
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -1945,45 +1946,97 @@ export function AppsScreen() {
               Save preferences
             </Button>
           </Card>
-          <Card style={{ gap: 12 }}>
-            <SectionHeading title="Memory" />
-            <Text style={s.muted}>Context you can inspect, correct or forget.</Text>
-            {data?.memories.map((item) => (
-              <MemoryRow key={item.id} memory={item} />
-            ))}
-            <Field
-              label="Remember something about me"
-              value={memory}
-              onChangeText={setMemory}
-              placeholder="I’m paid twice a month and file taxes jointly"
-            />
-            <Button
-              busy={busy}
-              disabled={!memory.trim()}
-              onPress={() =>
-                void save("/memories", { text: memory.trim(), source: "User added in Apps" })
-              }
-            >
-              Remember
-            </Button>
-          </Card>
+          <AgentFileCards />
         </>
       )}
       <ErrorNotice error={error} />
     </View>
   );
 }
-function MemoryRow({ memory }: { memory: AgentMemory }) {
-  const { mutate } = useAgentWorkspace();
+
+const fileAbout = {
+  soul: "This is Noa's persona: the values and habits it tries to keep in every conversation. It starts from Noa's template. Noa may refine it over time and tells you when it does, and you can edit it at any time.",
+  memory:
+    "This is what Noa has decided is worth remembering about you, gathered from your conversations. Noa reads it at the start of each chat and tidies it nightly. It can be out of date. Edit anything here, or ask Noa to forget something.",
+};
+const fileAuthor = { template: "Noa's template", you: "you", noa: "Noa" };
+
+function AgentFileCards() {
+  const { data } = useAgentWorkspace();
+  const [open, setOpen] = useState<"soul" | "memory" | null>(null);
+  const cards = [
+    {
+      key: "soul" as const,
+      title: "SOUL",
+      detail: "Who Noa is and how it works with you",
+      file: data?.soul,
+      icon: Heart,
+      tint: colors.sky,
+    },
+    {
+      key: "memory" as const,
+      title: "MEMORY",
+      detail: "What Noa remembers about you",
+      file: data?.memoryFile,
+      icon: MessageSquare,
+      tint: colors.blue,
+    },
+  ];
+  return (
+    <>
+      <View style={[s.row, { gap: 12 }]}>
+        {cards.map((card) => (
+          <Pressable
+            key={card.key}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${card.key} file`}
+            onPress={() => setOpen(card.key)}
+            style={({ pressed }) => ({
+              flex: 1,
+              minHeight: 140,
+              borderRadius: 22,
+              padding: 16,
+              justifyContent: "space-between",
+              backgroundColor: card.tint,
+              opacity: pressed ? 0.8 : 1,
+            })}
+          >
+            <View style={{ gap: 4 }}>
+              <Text
+                style={{ fontSize: 20, fontWeight: "700", letterSpacing: 0.4, color: colors.text }}
+              >
+                {card.title}
+              </Text>
+              <Text style={{ fontSize: 13, lineHeight: 18, color: colors.text }}>
+                {card.detail}
+              </Text>
+            </View>
+            <View style={[s.row, { justifyContent: "space-between", alignItems: "center" }]}>
+              <Text style={{ fontSize: 12, color: colors.text }}>
+                {card.file ? dateLabel(card.file.updatedAt) : ""}
+              </Text>
+              <card.icon size={22} strokeWidth={1.8} color={colors.blueDark} />
+            </View>
+          </Pressable>
+        ))}
+      </View>
+      {open && <AgentFileSheet kind={open} onClose={() => setOpen(null)} />}
+    </>
+  );
+}
+
+function AgentFileSheet({ kind, onClose }: { kind: "soul" | "memory"; onClose: () => void }) {
+  const { data, mutate } = useAgentWorkspace();
+  const file = kind === "soul" ? data?.soul : data?.memoryFile;
+  const [text, setText] = useState(file?.text ?? "");
   const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(memory.text);
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  async function act(forget: boolean) {
+  const [error, setError] = useState("");
+  async function save() {
     setBusy(true);
     setError("");
     try {
-      await mutate(`/memories/${memory.id}${forget ? "/forget" : ""}`, forget ? {} : { text });
+      await mutate(kind === "soul" ? "/soul" : "/memory-file", { text });
       setEditing(false);
     } catch (e) {
       setError(errorText(e));
@@ -1992,32 +2045,55 @@ function MemoryRow({ memory }: { memory: AgentMemory }) {
     }
   }
   return (
-    <View
-      style={{ gap: 8, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.line }}
+    <Sheet
+      title={kind === "soul" ? "Soul" : "Memory"}
+      subtitle={
+        file ? `Updated ${dateLabel(file.updatedAt)} by ${fileAuthor[file.updatedBy]}` : undefined
+      }
+      onClose={onClose}
     >
-      {editing ? (
-        <Field label="Memory" value={text} onChangeText={setText} />
-      ) : (
-        <Text style={s.text}>{memory.text}</Text>
-      )}
-      <Text style={s.small}>
-        {memory.source} · {stamp(memory.createdAt)}
-      </Text>
-      <View style={[s.row, { gap: 8 }]}>
+      <View style={{ gap: 14 }}>
+        <Text style={s.muted}>{fileAbout[kind]}</Text>
         {editing ? (
-          <Button small busy={busy} disabled={!text.trim()} onPress={() => void act(false)}>
-            Save correction
-          </Button>
+          <Field
+            label={kind === "soul" ? "Soul" : "Memory"}
+            multiline
+            value={text}
+            onChangeText={setText}
+          />
         ) : (
-          <Button small onPress={() => setEditing(true)}>
+          <Text selectable style={[s.text, { lineHeight: 22 }]}>
+            {file?.text ?? "Loading…"}
+          </Text>
+        )}
+        {editing ? (
+          <View style={[s.row, { gap: 8 }]}>
+            <Button busy={busy} disabled={!text.trim()} onPress={() => void save()}>
+              Save
+            </Button>
+            <Button
+              quiet
+              onPress={() => {
+                setText(file?.text ?? "");
+                setEditing(false);
+              }}
+            >
+              Cancel
+            </Button>
+          </View>
+        ) : (
+          <Button
+            disabled={!file}
+            onPress={() => {
+              setText(file?.text ?? "");
+              setEditing(true);
+            }}
+          >
             Edit
           </Button>
         )}
-        <Button small danger busy={busy} onPress={() => void act(true)}>
-          Forget
-        </Button>
+        <ErrorNotice error={error} />
       </View>
-      <ErrorNotice error={error} />
-    </View>
+    </Sheet>
   );
 }

@@ -44,6 +44,7 @@ import {
   pageLines,
   withoutRelativeTimes,
 } from "./page-diff.ts";
+import { loadMemory, loadSoul, tidyDueMemories } from "./soul-memory.ts";
 import { LostLeaseError, type TaskContext, TaskWorker } from "./worker.ts";
 
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -111,6 +112,7 @@ export class AgentService {
               `idea-recovery:${value.id}`,
             );
           });
+      await tidyDueMemories(this.db).catch((error) => backgroundFailure("tidy memory", error));
       for (const { owner, value } of await this.db.scan<{ id: string; lastIdeasAt?: string }>(
         "agent-settings",
       )) {
@@ -139,17 +141,29 @@ export class AgentService {
   }
   async snapshot(owner: string): Promise<AgentWorkspace> {
     await this.ensure(owner);
-    const [tasks, goals, monitors, ideas, memories, artifacts, notifications, identity] =
-      await Promise.all([
-        this.db.list<AgentTask>(owner, "tasks"),
-        this.db.list<Goal>(owner, "goals"),
-        this.db.list<Monitor>(owner, "monitors"),
-        this.db.list<Idea>(owner, "ideas"),
-        this.db.list<AgentMemory>(owner, "memories"),
-        this.db.list<AgentArtifact>(owner, "agent-artifacts"),
-        this.db.list<AgentNotification>(owner, "notifications"),
-        this.db.get<AgentIdentity>(owner, "agent-settings", "identity"),
-      ]);
+    const [
+      tasks,
+      goals,
+      monitors,
+      ideas,
+      memories,
+      artifacts,
+      notifications,
+      identity,
+      soul,
+      memoryFile,
+    ] = await Promise.all([
+      this.db.list<AgentTask>(owner, "tasks"),
+      this.db.list<Goal>(owner, "goals"),
+      this.db.list<Monitor>(owner, "monitors"),
+      this.db.list<Idea>(owner, "ideas"),
+      this.db.list<AgentMemory>(owner, "memories"),
+      this.db.list<AgentArtifact>(owner, "agent-artifacts"),
+      this.db.list<AgentNotification>(owner, "notifications"),
+      this.db.get<AgentIdentity>(owner, "agent-settings", "identity"),
+      loadSoul(this.db, owner),
+      loadMemory(this.db, owner),
+    ]);
     const heartbeat = await this.db.get<{ lastTickAt: string }>("system", "worker-status", "tasks");
     return {
       tasks,
@@ -157,6 +171,8 @@ export class AgentService {
       monitors,
       ideas,
       memories,
+      soul,
+      memoryFile,
       artifacts,
       notifications,
       identity: identity ?? { name: "Noa", tone: "warm" },
