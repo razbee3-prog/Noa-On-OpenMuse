@@ -13,7 +13,8 @@
       "usesAppleSignIn": true,
       "buildNumber": "1",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "Noa only opens your photo library if you choose to attach a photo to a message."
       }
     },
     "android": {
