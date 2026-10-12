@@ -26,6 +26,7 @@ import { JevService } from "../jev/service.ts";
 import { presentChoicesTool } from "../jev/tools.ts";
 import { searchDescription, searchInputSchema, searchInstructions } from "../search.ts";
 import { clockContext } from "./clock.ts";
+import { looksLikeCorrection, recordFeedback } from "./lessons.ts";
 import type { AgentService } from "./service.ts";
 import {
   forgetLines,
@@ -87,6 +88,16 @@ export class ConversationAgent extends AbstractAgent {
         ? null
         : new JevService({ store: this.service.db, adapter: this.jevAdapter, mode: jevMode });
     const latestText = typeof latest?.content === "string" ? latest.content : "";
+    if (!choiceContinuation && looksLikeCorrection(latestText)) {
+      const before = input.messages.slice(0, input.messages.indexOf(latest as never));
+      const said = before.filter((m) => m.role === "assistant").at(-1)?.content;
+      void recordFeedback(
+        this.service.db,
+        this.owner,
+        "correction",
+        `Person said: ${latestText.slice(0, 300)}${typeof said === "string" ? ` | Noa had said: ${said.slice(0, 200)}` : ""}`,
+      ).catch(() => {});
+    }
     if (latestText.startsWith(jevActionPrefix))
       return new Observable((subscriber) => {
         let subscription: { unsubscribe(): void } | undefined;

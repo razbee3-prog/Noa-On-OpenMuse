@@ -240,3 +240,13 @@ function splitTextAtToolCalls(events: Observable<BaseEvent>) {
     }),
   );
 }
+
+/** One-shot text completion for background jobs (no tools). */
+export async function generateText(model: string, system: string, user: string) {
+  return chat({
+    adapter: adapter(model),
+    messages: [{ role: "user", content: user }],
+    systemPrompts: [system],
+    stream: false,
+  });
+}
