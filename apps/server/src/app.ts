@@ -488,8 +488,8 @@ export async function createApp(
     return c.html(browser.console(c.get("owner"), c.req.param("id")));
   });
   app.post("/api/browsers/:id/console", async (c) => {
-    await browser.input(c.get("owner"), c.req.param("id"), await c.req.json());
-    return c.json({ ok: true });
+    const result = await browser.input(c.get("owner"), c.req.param("id"), await c.req.json());
+    return c.json({ ok: true, editable: result.editable });
   });
   app.all("/api/copilotkit/*", async (c) => {
     if (!agentConfigured(config))

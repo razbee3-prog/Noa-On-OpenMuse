@@ -11,11 +11,10 @@ import { useCallback, useEffect, useState } from "react";
 import { AppState, Image, Pressable, Text, View } from "react-native";
 import type { BrowserSession } from "../../../packages/domain/src";
 import type { ComputerSnapshot } from "../../../packages/domain/src/computer";
-import { browserAddress } from "./browser-address";
 import { useComputerDraft } from "./computer-drafts";
 import { computerStatus } from "./computer-status";
 import { LinuxWorkspace } from "./computer-workspace";
-import { Button, Card, colors, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
+import { Button, Card, colors, ErrorNotice, LinkRow, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
 export function ComputerEntry() {
@@ -81,18 +80,15 @@ export function BrowserThreadCard({ browser }: { browser: BrowserSession }) {
         </View>
       </View>
       {browser.previewUrl && browser.status === "active" && !failed ? (
-        <Image
-          accessibilityLabel={`Browser preview: ${browser.title}`}
-          source={{ uri: browser.previewUrl }}
-          style={{
-            width: "100%",
-            aspectRatio: 1.6,
-            borderRadius: 11,
-            backgroundColor: colors.card,
-          }}
-          resizeMode="contain"
-          onError={() => setFailed(true)}
-        />
+        <View style={{ height: 210, borderRadius: 11, overflow: "hidden" }}>
+          <Image
+            accessibilityLabel={`Browser preview: ${browser.title}`}
+            source={{ uri: browser.previewUrl }}
+            style={{ width: "100%", aspectRatio: 412 / 860, backgroundColor: colors.card }}
+            resizeMode="cover"
+            onError={() => setFailed(true)}
+          />
+        </View>
       ) : (
         <View
           style={{
@@ -114,16 +110,14 @@ export function BrowserThreadCard({ browser }: { browser: BrowserSession }) {
           ? "Reopen browser"
           : browser.status === "error"
             ? "Reconnect browser"
-            : "Take control"}
+            : "Open browser"}
       </Button>
     </Card>
   );
 }
 const tabIcons = { Browser: Globe2, Desktop: Monitor, Terminal, Files: FolderOpen } as const;
 export function ComputerSheet() {
-  const { workspace, api, refresh, close, open, navigate } = useWorkspace();
-  const [url, setUrl] = useState("");
-  const [busy, setBusy] = useState(false);
+  const { workspace, refresh, close, open, navigate } = useWorkspace();
   const [error, setError] = useState("");
   const [tab, setTab] = useComputerDraft("tab");
   // Unknown until the first snapshot, so a remembered Desktop tab survives reopening.
@@ -155,22 +149,6 @@ export function ComputerSheet() {
       clearInterval(timer);
     };
   }, [refresh]);
-  async function create() {
-    if (busy || !url.trim()) return;
-    setBusy(true);
-    setError("");
-    try {
-      const browser = await api.request<BrowserSession>("/api/browsers", {
-        url: browserAddress(url),
-      });
-      await refresh();
-      open({ type: "browser", browser });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
   return (
     <Sheet
       title="Agent computer"
@@ -211,26 +189,6 @@ export function ComputerSheet() {
         <ErrorNotice error={error} />
         {shown === "Browser" ? (
           <>
-            <View>
-              <Field
-                label="Website address"
-                value={url}
-                onChangeText={setUrl}
-                placeholder="https://example.com"
-                autoCapitalize="none"
-                keyboardType="url"
-                onSubmitEditing={() => void create()}
-              />
-              <Button
-                primary
-                icon={Plus}
-                busy={busy}
-                disabled={!available || !url.trim()}
-                onPress={() => void create()}
-              >
-                Open a browser session
-              </Button>
-            </View>
             {[...workspace.browsers]
               .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
               .map((browser) => (
@@ -238,8 +196,7 @@ export function ComputerSheet() {
               ))}
             {!workspace.browsers.length && (
               <Text style={s.muted}>
-                Open a page here or ask your agent to research something. Its browsing sessions will
-                appear here.
+                Ask Noa to look something up. Its browsing sessions will appear here.
               </Text>
             )}
             <Text style={s.small}>

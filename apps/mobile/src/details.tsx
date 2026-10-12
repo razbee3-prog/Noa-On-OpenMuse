@@ -6,12 +6,10 @@ import {
   Clock3,
   Download,
   Edit3,
-  ExternalLink,
   FileText,
   Globe2,
   Mail as MailIcon,
   Reply,
-  RotateCw,
   Save,
   Send,
   ShieldCheck,
@@ -19,11 +17,10 @@ import {
   X,
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Linking, Platform, Text, View } from "react-native";
+import { ActivityIndicator, Linking, Platform, Text, View } from "react-native";
 import {
   type ActionProposal,
   type Artifact,
-  type BrowserSession,
   type CalendarEvent,
   type EmailDraft,
   type EventDraft,
@@ -33,8 +30,7 @@ import {
   type ProposalInput,
 } from "../../../packages/domain/src";
 import { DelegateSheet, NotificationsSheet, TaskDetail } from "./agent-ui";
-import BrowserConsole from "./BrowserConsole";
-import { browserAddress, browserSite } from "./browser-address";
+import { BrowserView } from "./browser-view";
 import { ComputerSheet } from "./computer";
 import DateTimeEditor from "./DateTimeEditor";
 import { localDateTime, zonedInstant } from "./date-time";
@@ -46,7 +42,6 @@ import {
   Chip,
   colors,
   dateLabel,
-  Empty,
   ErrorNotice,
   Field,
   LinkRow,
@@ -77,7 +72,8 @@ export function Details({ detail }: { detail: Detail }) {
     return <EventEditor event={detail.event} draft={detail.draft} neighbors={detail.neighbors} />;
   if (detail.type === "file") return <FileDetail file={detail.file} />;
   if (detail.type === "review") return <ReviewDetail initial={detail.action} />;
-  if (detail.type === "browser") return <BrowserDetail initial={detail.browser} />;
+  if (detail.type === "browser")
+    return <BrowserView initial={detail.browser} startInControl={detail.control} />;
   return (
     <Sheet title="Your things" subtitle="Mail, calendar and files in one place." onClose={close}>
       {[
@@ -855,166 +851,6 @@ function FileDetail({ file: f }: { file: Artifact }) {
         Added {dateLabel(f.createdAt)}
         {f.parentId ? " · filled copy" : ""}
       </Text>
-    </Sheet>
-  );
-}
-function BrowserDetail({ initial }: { initial: BrowserSession }) {
-  const { workspace: w, api, refresh, close, notify } = useWorkspace();
-  const [local, setLocal] = useState(initial);
-  const [url, setUrl] = useState(initial.url);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [retry, setRetry] = useState(0);
-  const latest = w.browsers.find((b) => b.id === initial.id);
-  const browser = {
-    ...(latest && latest.updatedAt > local.updatedAt ? latest : local),
-    consoleUrl: local.consoleUrl,
-    previewUrl: local.previewUrl,
-  };
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    setError("");
-    void api
-      .request<BrowserSession>(`/api/browsers/${initial.id}`)
-      .then((session) => {
-        if (active) {
-          setLocal(session);
-          setLoading(false);
-        }
-      })
-      .catch((e) => {
-        if (active) setError(e instanceof Error ? e.message : String(e));
-      });
-    return () => {
-      active = false;
-    };
-  }, [api, initial.id, retry]);
-  async function importDownloads() {
-    setBusy(true);
-    setError("");
-    try {
-      const result = await api.request<{
-        files: Artifact[];
-        failures: { name: string; message: string }[];
-      }>(`/api/browsers/${browser.id}/import-downloads`, {});
-      await refresh();
-      if (result.failures.length)
-        setError(
-          result.failures.map((failure) => `${failure.name}: ${failure.message}`).join("\n"),
-        );
-      const files = result.files;
-      notify(
-        files.length
-          ? `${files.length} PDF download${files.length === 1 ? "" : "s"} added to Files.`
-          : "No new PDF downloads in this session.",
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function mutate(end = false) {
-    if (busy || loading) return;
-    setBusy(true);
-    setError("");
-    try {
-      const result = await api.request<BrowserSession>(
-        `/api/browsers/${browser.id}/${end ? "close" : browser.status === "closed" ? "reopen" : "navigate"}`,
-        end ? {} : { url: browserAddress(url) },
-      );
-      setLocal(result);
-      setUrl(result.url);
-      await refresh();
-      if (end) close();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Sheet
-      title={browserSite(browser.url)}
-      subtitle={`${statusLabel(browser.status)} · updated ${timeLabel(browser.updatedAt)}`}
-      onClose={close}
-      wide
-    >
-      <View style={[s.row, { gap: 10, marginBottom: 16 }]}>
-        <View style={{ flex: 1 }}>
-          <Field
-            label="Website address"
-            value={url}
-            onChangeText={setUrl}
-            autoCapitalize="none"
-            keyboardType="url"
-            onSubmitEditing={() => void mutate()}
-          />
-        </View>
-        <Button primary busy={busy} disabled={loading || !url.trim()} onPress={() => void mutate()}>
-          {browser.status === "closed" ? "Reopen" : browser.status === "error" ? "Reconnect" : "Go"}
-        </Button>
-      </View>
-      <ErrorNotice error={error} />
-      {loading ? (
-        <View style={[s.row, { gap: 10, paddingVertical: 24 }]}>
-          {error ? (
-            <Button onPress={() => setRetry(retry + 1)}>Retry connection</Button>
-          ) : (
-            <>
-              <ActivityIndicator color={colors.blueDark} />
-              <Text style={s.muted}>Connecting to your browser…</Text>
-            </>
-          )}
-        </View>
-      ) : browser.status === "active" && browser.consoleUrl ? (
-        <BrowserConsole url={api.url(browser.consoleUrl)} />
-      ) : browser.status === "active" && browser.previewUrl ? (
-        <Image
-          source={{ uri: api.url(browser.previewUrl) }}
-          style={{ width: "100%", height: 450, backgroundColor: colors.canvas }}
-          resizeMode="contain"
-        />
-      ) : (
-        <Empty
-          icon={Globe2}
-          title={
-            browser.status === "closed" ? "This session is closed" : "Preview is not available"
-          }
-          detail={
-            browser.status === "closed"
-              ? "Your profile and downloads are saved. Reopen to continue where you left off."
-              : "Reconnect to continue with your saved browser profile."
-          }
-        />
-      )}
-      <View style={[s.row, { gap: 10, marginTop: 18, flexWrap: "wrap" }]}>
-        {!loading && browser.status === "active" && browser.consoleUrl && (
-          <Button
-            icon={ExternalLink}
-            onPress={() => void Linking.openURL(api.url(browser.consoleUrl || ""))}
-          >
-            Open browser in a window
-          </Button>
-        )}
-        {!loading && (
-          <Button icon={RotateCw} disabled={busy} onPress={() => setRetry(retry + 1)}>
-            Refresh connection
-          </Button>
-        )}
-        {!loading && browser.status !== "closed" && (
-          <Button icon={Download} busy={busy} onPress={() => void importDownloads()}>
-            Import PDF downloads
-          </Button>
-        )}
-        {!loading && browser.status !== "closed" && (
-          <Button icon={X} danger busy={busy} onPress={() => void mutate(true)}>
-            Close session
-          </Button>
-        )}
-      </View>
     </Sheet>
   );
 }

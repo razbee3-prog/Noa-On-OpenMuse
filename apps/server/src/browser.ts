@@ -341,11 +341,11 @@ export class BrowserService {
       throw new AppError("A JSON object is required for browser input", 422);
     return this.serial(id, async () => {
       await this.get(owner, id);
-      return this.save(
-        owner,
-        await (await this.request(`/sessions/${encodeURIComponent(id)}/input`, value)).json(),
-        id,
-      );
+      const payload: unknown = await (
+        await this.request(`/sessions/${encodeURIComponent(id)}/input`, value)
+      ).json();
+      const editable = z.object({ editable: z.literal(true) }).safeParse(payload).success;
+      return { ...(await this.save(owner, payload, id)), editable };
     });
   }
   async imports(owner: string, id: string) {

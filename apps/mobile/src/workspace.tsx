@@ -16,7 +16,7 @@ export type Detail =
   | { type: "email"; draft?: Partial<EmailDraft> & { id?: string } }
   | { type: "event"; event?: CalendarEvent; draft?: EventDraft; neighbors?: CalendarEvent[] }
   | { type: "file"; file: Artifact }
-  | { type: "browser"; browser: BrowserSession }
+  | { type: "browser"; browser: BrowserSession; control?: boolean }
   | { type: "review"; action: ActionProposal }
   | { type: "task"; taskId: string }
   | { type: "delegate"; goalId?: string; milestoneId?: string }

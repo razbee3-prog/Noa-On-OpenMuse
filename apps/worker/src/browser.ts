@@ -11,6 +11,16 @@ import { WorkerError } from "./errors.ts";
 import { validatePublicUrl } from "./network.ts";
 import { startEgressProxy } from "./proxy.ts";
 
+const VIEWPORT = { width: 412, height: 860 };
+// True when the tap left focus in something you type into, so the phone keyboard should open.
+const FOCUSED_FIELD = `(() => {
+  const e = document.activeElement;
+  if (!e) return false;
+  if (e.isContentEditable || e.tagName === "TEXTAREA" || e.tagName === "IFRAME") return true;
+  return e.tagName === "INPUT" &&
+    !["button", "submit", "reset", "checkbox", "radio", "range", "color", "file", "image", "hidden"].includes(e.type);
+})()`;
+
 export interface Session {
   id: string;
   title: string;
@@ -237,7 +247,7 @@ export async function createBrowserManager(
     );
     let context: BrowserContext;
     try {
-      const { chromium } = await import("playwright");
+      const { chromium, devices } = await import("playwright");
       context = await chromium.launchPersistentContext(profileDir, {
         // Chromium does not need the worker API credential in its environment.
         env: {
@@ -246,7 +256,12 @@ export async function createBrowserManager(
           LANG: "C.UTF-8",
         },
         headless: true,
-        viewport: { width: 1280, height: 800 },
+        // A phone-shaped page, so sites serve their mobile layout and fill the iPhone view.
+        viewport: VIEWPORT,
+        deviceScaleFactor: 2,
+        isMobile: true,
+        hasTouch: true,
+        userAgent: devices["Pixel 7"].userAgent,
         proxy: { server: proxy.url, bypass: "<-loopback>" },
         // Service-worker fetches skip context.route, but still go through the egress proxy
         // and the host-resolver rule, which block private destinations.
@@ -401,16 +416,30 @@ export async function createBrowserManager(
       serial(id, async () => {
         const { page } = active(id);
         const { type, x, y, key, text, deltaY } = input;
-        if (
+        const fraction = (value: unknown): value is number =>
+          typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 1;
+        let editable = false;
+        if (type === "tap" && fraction(x) && fraction(y)) {
+          await page.touchscreen.tap(x * VIEWPORT.width, y * VIEWPORT.height);
+          await page.waitForTimeout(120);
+          editable = (await page.evaluate(FOCUSED_FIELD).catch(() => false)) === true;
+        } else if (
+          type === "swipe" &&
+          typeof deltaY === "number" &&
+          Number.isFinite(deltaY) &&
+          Math.abs(deltaY) <= 4
+        )
+          await page.mouse.wheel(0, Math.round(deltaY * VIEWPORT.height));
+        else if (
           type === "click" &&
           typeof x === "number" &&
           typeof y === "number" &&
           Number.isFinite(x) &&
           Number.isFinite(y) &&
           x >= 0 &&
-          x < 1280 &&
+          x < VIEWPORT.width &&
           y >= 0 &&
-          y < 800
+          y < VIEWPORT.height
         )
           await page.mouse.click(x, y);
         else if (type === "text" && typeof text === "string" && text.length <= 10_000)
@@ -431,7 +460,7 @@ export async function createBrowserManager(
         )
           await page.mouse.wheel(0, deltaY);
         else throw new WorkerError("INVALID_INPUT", "Unsupported browser input or coordinates.");
-        return refresh(id);
+        return { ...(await refresh(id)), editable };
       }),
     act: (id: string, raw: Record<string, unknown>) =>
       serial(id, async () => {
