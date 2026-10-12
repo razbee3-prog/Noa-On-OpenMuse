@@ -43,7 +43,6 @@ import {
   MuseApi,
   type Session,
   sessionStillValid,
-  useInviteRequired,
 } from "./src/api";
 import { ChatScreen, WorkspaceTools } from "./src/chat";
 import { ComputerEntry } from "./src/computer";
@@ -93,9 +92,6 @@ const titles: Partial<Record<Section, { title: string; subtitle: string }>> = {
 export default function App() {
   const [token, setToken] = useState("");
   const [accessKey, setAccessKey] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
-  const [needsInvite, setNeedsInvite] = useState(false);
-  const inviteRequired = useInviteRequired();
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
   // The iPhone app signs in only with Apple; the web app keeps the admin access key.
@@ -135,19 +131,16 @@ export default function App() {
       await finish(
         await createAppleSession({
           identityToken: credential.identityToken,
-          inviteCode: inviteCode.trim() || undefined,
           fullName: fullName || undefined,
         }),
       );
     } catch (e) {
       if ((e as { code?: string }).code === "ERR_REQUEST_CANCELED") return;
-      const text = e instanceof Error ? e.message : String(e);
-      if (/invite code/i.test(text)) setNeedsInvite(true);
-      setError(text);
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
-  }, [finish, inviteCode]);
+  }, [finish]);
   useEffect(() => onSignedOut(() => setToken("")), []);
   useEffect(() => {
     void (async () => {
@@ -196,30 +189,13 @@ export default function App() {
               <Card style={{ width: "100%" }}>
                 <ErrorNotice error={error} />
                 {appleOnly ? (
-                  <>
-                    {needsInvite ? (
-                      <Field
-                        label="Invite code"
-                        value={inviteCode}
-                        onChangeText={setInviteCode}
-                        autoCapitalize="characters"
-                        autoCorrect={false}
-                        placeholder="NOA-XXXXX-XXXXX"
-                      />
-                    ) : null}
-                    <AppleAuthentication.AppleAuthenticationButton
-                      buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-                      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                      cornerRadius={14}
-                      style={{ width: "100%", height: 50 }}
-                      onPress={() => void signInWithApple()}
-                    />
-                    {inviteRequired ? (
-                      <Text style={[s.small, { marginTop: 15 }]}>
-                        New here? Sign in with Apple, then enter the invite code you were sent.
-                      </Text>
-                    ) : null}
-                  </>
+                  <AppleAuthentication.AppleAuthenticationButton
+                    buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                    buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                    cornerRadius={14}
+                    style={{ width: "100%", height: 50 }}
+                    onPress={() => void signInWithApple()}
+                  />
                 ) : (
                   <>
                     <Field

@@ -146,7 +146,6 @@ export async function createApp(
       ok: true,
       mode: config.mode,
       agentConfigured: agentConfigured(config),
-      inviteRequired: accounts.inviteRequired,
       browserConfigured: Boolean(config.workerUrl && config.workerToken),
     }),
   );
@@ -167,7 +166,6 @@ export async function createApp(
     const body = z
       .object({
         identityToken: z.string().min(20).max(8192),
-        inviteCode: z.string().trim().max(64).optional(),
         fullName: z.string().trim().max(160).optional(),
       })
       .parse(await c.req.json());
@@ -261,17 +259,6 @@ export async function createApp(
   app.post("/api/connectors/:id/disconnect", async (c) =>
     c.json(await connectors.disconnect(c.get("owner"), c.req.param("id"))),
   );
-  const requireAdmin = (role: string) => {
-    if (role !== "admin") throw new AppError("Only the workspace admin can manage invites", 403);
-  };
-  app.get("/api/invites", async (c) => {
-    requireAdmin(c.get("role"));
-    return c.json(await accounts.listInvites());
-  });
-  app.post("/api/invites", async (c) => {
-    requireAdmin(c.get("role"));
-    return c.json(await accounts.createInvite(c.get("owner")), 201);
-  });
   app.get("/api/workspace", async (c) => {
     const [snapshot, reachable] = await Promise.all([
       workspace.snapshot(c.get("owner"), c.req.query("q")),
