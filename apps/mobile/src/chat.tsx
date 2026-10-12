@@ -23,10 +23,12 @@ import {
 import { z } from "zod";
 import { ArtifactCard } from "./agent-ui";
 import { useAgentWorkspace } from "./agent-workspace";
+import { splitReply } from "./assistant-markdown";
 import { AssistantResponse } from "./assistant-response";
 import { BackgroundUpdates } from "./background-updates";
 import { BrowserRunContext, BrowserToolCard } from "./browser-tool-card";
 import { BrowserThreadCard } from "./computer";
+import { ConnectToolCard } from "./connect-card";
 import { ConversationQueue, type QueuedMessage } from "./conversation-queue";
 import {
   ConversationTurnError,
@@ -133,6 +135,14 @@ export function WorkspaceTools() {
     parameters: displayParameters,
     render: ({ result, status }) => (
       <SignInToolCard result={result} loading={status !== "complete"} />
+    ),
+  });
+  useRenderTool({
+    name: "offer_connect",
+    description: "Show a Connect button for a service that isn't connected",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <ConnectToolCard result={result} loading={status !== "complete"} />
     ),
   });
   useRenderTool({
@@ -626,27 +636,33 @@ export function ChatScreen({
                   gap: 8,
                 }}
               >
-                {!!text && (
-                  <View
-                    style={{
-                      paddingHorizontal: long ? 4 : 15,
-                      paddingVertical: user ? 10 : long ? 2 : 12,
-                      borderRadius: 22,
-                      backgroundColor: user ? colors.text : long ? "transparent" : colors.neutral,
-                    }}
-                  >
-                    {user ? (
-                      <Text
-                        selectable
-                        style={[s.text, { fontSize: 16, lineHeight: 23, color: colors.card }]}
-                      >
-                        {text}
-                      </Text>
-                    ) : (
-                      <AssistantResponse content={text} />
-                    )}
-                  </View>
-                )}
+                {(user ? [text].filter(Boolean) : splitReply(text)).map((part, index) => {
+                  const wide = !user && (part.length > 320 || /\n\s*\|/.test(part));
+                  return (
+                    <View
+                      // biome-ignore lint/suspicious/noArrayIndexKey: parts of one saved message never reorder
+                      key={`${message.id}-${index}`}
+                      style={{
+                        alignSelf: wide ? "stretch" : user ? "flex-end" : "flex-start",
+                        paddingHorizontal: wide ? 4 : 15,
+                        paddingVertical: user ? 10 : wide ? 2 : 12,
+                        borderRadius: 22,
+                        backgroundColor: user ? colors.text : wide ? "transparent" : colors.neutral,
+                      }}
+                    >
+                      {user ? (
+                        <Text
+                          selectable
+                          style={[s.text, { fontSize: 16, lineHeight: 23, color: colors.card }]}
+                        >
+                          {part}
+                        </Text>
+                      ) : (
+                        <AssistantResponse content={part} />
+                      )}
+                    </View>
+                  );
+                })}
                 <JevInteractionContext.Provider
                   value={{
                     threadId,

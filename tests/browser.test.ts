@@ -69,7 +69,7 @@ test("browser API reopens an owned profile at the edited address and renews cons
   assert.notEqual(renewed.consoleUrl, previous.consoleUrl);
   const console = await app.request(renewed.consoleUrl);
   assert.equal(console.status, 200);
-  assert.match(await console.text(), /Text to type in browser/);
+  assert.match(await console.text(), /Type into the page/);
   assert.equal((await app.request(path)).status, 401);
   const hiddenId = "00000000-0000-4000-8000-000000000099";
   await db.put("someone-else", "browsers", { ...savedSession, id: hiddenId });

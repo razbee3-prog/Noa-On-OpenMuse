@@ -15,3 +15,11 @@ export function isSafeAssistantUrl(value: string): boolean {
     return false;
   }
 }
+
+/** Noa separates distinct messages in one reply with a line holding only `---`. */
+export function splitReply(text: string) {
+  return text
+    .split(/\n[ \t]*---[ \t]*(?:\n|$)/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}

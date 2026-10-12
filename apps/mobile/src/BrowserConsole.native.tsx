@@ -17,7 +17,10 @@ export default function BrowserConsole({
       <WebView
         source={{ uri: url }}
         onError={(event) => setError(event.nativeEvent.description)}
-        style={{ height: 520, borderRadius: 12 }}
+        keyboardDisplayRequiresUserAction={false}
+        hideKeyboardAccessoryView
+        scrollEnabled={false}
+        style={{ height: 620, borderRadius: 12 }}
       />
     </View>
   );
