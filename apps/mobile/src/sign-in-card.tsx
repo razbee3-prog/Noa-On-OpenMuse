@@ -52,7 +52,7 @@ export function SignInPanel({
       const browser = await api.request<BrowserSession>(
         `/api/browsers/${encodeURIComponent(sessionId)}`,
       );
-      open({ type: "browser", browser });
+      open({ type: "browser", browser, control: true });
     } catch (e) {
       setError(
         `Couldn't open the browser: ${e instanceof Error ? e.message : String(e)}. Try again.`,

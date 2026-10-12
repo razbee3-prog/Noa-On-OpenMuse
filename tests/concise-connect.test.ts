@@ -47,7 +47,10 @@ test("connect offers name the service and default to no browser alternative", ()
 test("browser console types through the native keyboard with no separate text box", () => {
   const html = browserConsole("/api/browsers/b1/preview?sig=x");
   assert.match(html, /id="sink"/);
-  assert.match(html, /aria-label="Keyboard"/);
-  assert.match(html, /naturalWidth/);
+  assert.match(html, /type==='control'/);
+  assert.match(html, /tell\(\{type:'locked'\}\)/);
+  assert.doesNotMatch(html, /Website address|id="kb"/);
+  assert.match(html, /type:'tap'/);
+  assert.match(html, /result&&result\.editable/);
   assert.doesNotMatch(html, /Send text|Type into the selected field|OpenMuse/);
 });

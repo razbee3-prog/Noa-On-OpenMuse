@@ -113,6 +113,16 @@ test("console input persists the worker's current page title and URL", async (t)
   assert.deepEqual(await service.get("owner", sessionId), updated);
 });
 
+test("a console tap reports whether it focused a text field", async (t) => {
+  const { db, service } = await browserFixture(t, () => ({
+    data: { ...savedSession, editable: true },
+  }));
+  await db.put("owner", "browsers", savedSession);
+  const result = await service.input("owner", sessionId, { type: "tap", x: 0.5, y: 0.2 });
+  assert.equal(result.editable, true);
+  assert.equal("editable" in ((await service.get("owner", sessionId)) as object), false);
+});
+
 test("failed creation remains app-visible and can be retried with its original UUID", async (t) => {
   let failing = true;
   let requestedId: unknown;

@@ -45,7 +45,11 @@ export function AgentComputerButton() {
     if (busy) return;
     setBusy(true);
     try {
-      open({ type: "browser", browser: await api.request<AgentBrowser>("/api/agent-browser") });
+      open({
+        type: "browser",
+        browser: await api.request<AgentBrowser>("/api/agent-browser"),
+        control: needsYou,
+      });
     } catch {
       open({ type: "computer" });
     } finally {

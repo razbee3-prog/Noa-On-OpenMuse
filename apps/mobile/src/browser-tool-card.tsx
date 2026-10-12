@@ -1,4 +1,4 @@
-import { Check, Globe2, Hand, RotateCw } from "lucide-react-native";
+import { Check, Globe2, Maximize2, RotateCw } from "lucide-react-native";
 import { createContext, useContext, useEffect, useState } from "react";
 import { ActivityIndicator, AppState, Image, Text, View } from "react-native";
 import { z } from "zod";
@@ -43,7 +43,7 @@ export function BrowserToolCard({
   loading: boolean;
 }) {
   const { api, workspace, open } = useWorkspace();
-  const { running, active } = useContext(BrowserRunContext);
+  const { active } = useContext(BrowserRunContext);
   const working = loading && active;
   const value = resultValue(result);
   const observation = observationSchema.safeParse(value);
@@ -118,18 +118,15 @@ export function BrowserToolCard({
         ) : null}
       </View>
       {preview ? (
-        <Image
-          accessibilityLabel={`Browser preview: ${visited?.title}`}
-          source={{ uri: api.url(preview) }}
-          style={{
-            width: "100%",
-            aspectRatio: 1.7,
-            borderRadius: 12,
-            backgroundColor: colors.card,
-          }}
-          resizeMode="contain"
-          onError={() => setPreviewFailed(true)}
-        />
+        <View style={{ height: 210, borderRadius: 12, overflow: "hidden" }}>
+          <Image
+            accessibilityLabel={`Browser preview: ${visited?.title}`}
+            source={{ uri: api.url(preview) }}
+            style={{ width: "100%", aspectRatio: 412 / 860, backgroundColor: colors.card }}
+            resizeMode="cover"
+            onError={() => setPreviewFailed(true)}
+          />
+        </View>
       ) : (
         <View style={{ backgroundColor: colors.canvas, borderRadius: 12, padding: 21, gap: 12 }}>
           <Text numberOfLines={2} style={[s.text, { fontSize: 14 }]}>
@@ -149,11 +146,11 @@ export function BrowserToolCard({
               {browser && browser.url !== visited.url
                 ? "Page visited. The browser has moved on."
                 : browser?.status === "closed"
-                  ? "Session saved. Take control to reopen it."
+                  ? "Session saved. Open the browser to reopen it."
                   : browser?.status === "error"
-                    ? "Session needs attention. Take control to reconnect."
+                    ? "Session needs attention. Open the browser to reconnect."
                     : previewFailed
-                      ? "Preview unavailable. You can still take control."
+                      ? "Preview unavailable. You can still open the browser."
                       : "Connecting to the saved session…"}
             </Text>
           ) : null}
@@ -162,12 +159,12 @@ export function BrowserToolCard({
       <ErrorNotice error={failure || error} />
       {!loading && visited && (
         <Button
-          icon={Hand}
-          disabled={!browser || running}
+          icon={Maximize2}
+          disabled={!browser}
           onPress={() => browser && open({ type: "browser", browser })}
           style={{ backgroundColor: colors.canvas, minHeight: 38, paddingVertical: 8 }}
         >
-          Take control
+          Open browser
         </Button>
       )}
       {!!error && (
