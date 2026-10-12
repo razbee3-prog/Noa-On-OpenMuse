@@ -7,7 +7,7 @@ import {
   useRenderTool,
   useRenderToolCall,
 } from "@copilotkit/react-native/headless";
-import { ArrowDown, ArrowUp, FileText, RotateCcw, Square, X } from "lucide-react-native";
+import { ArrowDown, ArrowUp, FileText, Plus, RotateCcw, Square, X } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   Keyboard,
@@ -43,7 +43,7 @@ import { SearchToolCard } from "./search-tool-card";
 import { SignInToolCard } from "./sign-in-card";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
-import { Button, Card, CheckRow, colors, ErrorNotice, s } from "./ui";
+import { Button, Card, CheckRow, colors, ErrorNotice, Mascot, s } from "./ui";
 import { VoiceInputButton } from "./voice-input";
 import { useWorkspace } from "./workspace";
 
@@ -286,6 +286,17 @@ export function ChatScreen({
   // Set while a queued message is being sent, so a lock refusal holds it instead of failing.
   const queuedTurn = useRef(false);
   const [keyboardPadding, setKeyboardPadding] = useState(0);
+
+  useEffect(() => {
+    const sub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => {
+        if (followLatest.current)
+          setTimeout(() => list.current?.scrollToEnd({ animated: true }), 60);
+      },
+    );
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     if (Platform.OS !== "android") return;
@@ -604,29 +615,31 @@ export function ChatScreen({
                   : message.content
                 : "";
             const toolCalls = "toolCalls" in message ? message.toolCalls || [] : [];
+            const long = !user && (text.length > 320 || /\n\s*\|/.test(text));
             return (
               <View
                 key={message.id}
                 style={{
                   alignSelf: user ? "flex-end" : "flex-start",
-                  maxWidth: user ? "85%" : "95%",
-                  width: toolCalls.length ? "95%" : undefined,
+                  maxWidth: user ? "80%" : long ? "100%" : "92%",
+                  width: toolCalls.length || long ? "100%" : undefined,
                   gap: 8,
                 }}
               >
                 {!!text && (
                   <View
                     style={{
-                      paddingHorizontal: 16,
-                      paddingVertical: 13,
+                      paddingHorizontal: long ? 4 : 15,
+                      paddingVertical: user ? 10 : long ? 2 : 12,
                       borderRadius: 22,
-                      borderBottomRightRadius: user ? 7 : 22,
-                      borderBottomLeftRadius: user ? 22 : 7,
-                      backgroundColor: user ? colors.blue : colors.line,
+                      backgroundColor: user ? colors.text : long ? "transparent" : colors.neutral,
                     }}
                   >
                     {user ? (
-                      <Text selectable style={[s.text, { fontSize: 16, lineHeight: 24 }]}>
+                      <Text
+                        selectable
+                        style={[s.text, { fontSize: 16, lineHeight: 23, color: colors.card }]}
+                      >
                         {text}
                       </Text>
                     ) : (
@@ -741,31 +754,14 @@ export function ChatScreen({
         {(!richThreads || selection.id === mainId) && <BackgroundUpdates />}
         {(busy || agent.isRunning) && (
           <View
-            accessibilityLabel="Agent is working"
+            accessibilityLabel="Noa is working"
             style={[
               s.row,
-              {
-                alignSelf: "flex-start",
-                gap: 7,
-                paddingHorizontal: 19,
-                paddingVertical: 18,
-                backgroundColor: colors.line,
-                borderRadius: 28,
-              },
+              { alignSelf: "flex-start", gap: 8, paddingHorizontal: 4, paddingVertical: 4 },
             ]}
           >
-            {[0.4, 0.75, 0.5].map((opacity) => (
-              <View
-                key={opacity}
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor: colors.muted,
-                  opacity,
-                }}
-              />
-            ))}
+            <Mascot size={24} />
+            <Text style={s.muted}>Noa is working…</Text>
           </View>
         )}
         <ErrorNotice error={error} />
@@ -787,18 +783,34 @@ export function ChatScreen({
         )}
       </ScrollView>
       {awayFromLatest && (
-        <Button
-          small
-          icon={ArrowDown}
-          style={{ alignSelf: "center", marginBottom: 10 }}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Latest messages"
           onPress={() => {
             followLatest.current = true;
             setAwayFromLatest(false);
             list.current?.scrollToEnd({ animated: true });
           }}
+          style={({ pressed }) => ({
+            alignSelf: "center",
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            marginBottom: 8,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: pressed ? colors.neutral : colors.card,
+            borderWidth: 1,
+            borderColor: colors.line,
+            shadowColor: colors.shadow,
+            shadowOpacity: 0.08,
+            shadowRadius: 10,
+            shadowOffset: { width: 0, height: 2 },
+            elevation: 2,
+          })}
         >
-          Latest messages
-        </Button>
+          <ArrowDown size={20} strokeWidth={1.8} color={colors.text} />
+        </Pressable>
       )}
       <KeyboardAvoidingView
         enabled={false}
@@ -889,150 +901,159 @@ export function ChatScreen({
             </Button>
           </Card>
         )}
-        <View
-          style={{
-            backgroundColor: colors.card,
-            borderRadius: 32,
-            borderWidth: 1,
-            borderColor: focused ? colors.focus : colors.neutral,
-            padding: 8,
-            shadowColor: colors.shadow,
-            shadowOpacity: focused ? 0.1 : 0.06,
-            shadowRadius: 20,
-            shadowOffset: { width: 0, height: 4 },
-            elevation: 4,
-          }}
-        >
-          {attachments.length > 0 && (
-            <View style={[s.row, { gap: 6, flexWrap: "wrap", padding: 9 }]}>
-              {w.files
-                .filter((f) => attachments.includes(f.id))
-                .map((f) => (
-                  <Pressable
-                    key={f.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Remove attachment: ${f.name}`}
-                    onPress={() => setAttachments((ids) => ids.filter((id) => id !== f.id))}
-                    style={[
-                      s.row,
-                      {
-                        gap: 7,
-                        maxWidth: "100%",
-                        backgroundColor: colors.sky,
-                        borderRadius: 16,
-                        paddingHorizontal: 11,
-                        paddingVertical: 8,
-                      },
-                    ]}
-                  >
-                    <FileText size={14} color={colors.blueDark} />
-                    <Text
-                      numberOfLines={1}
-                      style={{ flexShrink: 1, fontSize: 12, color: colors.text }}
+        <View style={[s.row, { gap: 8, alignItems: "flex-end", paddingTop: 4, paddingBottom: 8 }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Attach a document"
+            accessibilityState={{ expanded: picking }}
+            onPress={() => setPicking(!picking)}
+            style={({ pressed }) => ({
+              width: 46,
+              height: 46,
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 23,
+              backgroundColor: picking || pressed ? colors.sky : colors.neutral,
+            })}
+          >
+            <Plus size={22} strokeWidth={1.8} color={colors.text} />
+          </Pressable>
+          <View
+            style={{
+              flex: 1,
+              minHeight: 46,
+              backgroundColor: colors.card,
+              borderRadius: 23,
+              borderWidth: 1,
+              borderColor: focused ? colors.focus : colors.line,
+              paddingLeft: 16,
+              paddingRight: 1,
+            }}
+          >
+            {attachments.length > 0 && (
+              <View style={[s.row, { gap: 6, flexWrap: "wrap", padding: 9 }]}>
+                {w.files
+                  .filter((f) => attachments.includes(f.id))
+                  .map((f) => (
+                    <Pressable
+                      key={f.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove attachment: ${f.name}`}
+                      onPress={() => setAttachments((ids) => ids.filter((id) => id !== f.id))}
+                      style={[
+                        s.row,
+                        {
+                          gap: 7,
+                          maxWidth: "100%",
+                          backgroundColor: colors.sky,
+                          borderRadius: 16,
+                          paddingHorizontal: 11,
+                          paddingVertical: 8,
+                        },
+                      ]}
                     >
-                      {f.name}
-                    </Text>
-                    <X size={13} color={colors.muted} />
-                  </Pressable>
-                ))}
-            </View>
-          )}
-          <View style={[s.row, { gap: 7, alignItems: "flex-end" }]}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Attach a document"
-              accessibilityState={{ expanded: picking }}
-              onPress={() => setPicking(!picking)}
-              style={({ pressed }) => ({
-                width: 44,
-                height: 44,
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: 24,
-                backgroundColor: picking || pressed ? colors.sky : "transparent",
-              })}
-            >
-              <Text style={{ color: colors.text, fontSize: 29, fontWeight: "300", lineHeight: 32 }}>
-                +
-              </Text>
-            </Pressable>
-            <TextInput
-              accessibilityLabel="Message Noa"
-              value={draft}
-              onChangeText={setDraft}
-              onContentSizeChange={(event) =>
-                setInputHeight(Math.max(44, Math.min(140, event.nativeEvent.contentSize.height)))
-              }
-              placeholder={
-                !isReady
-                  ? "Connecting…"
-                  : !loaded
-                    ? historyError
-                      ? "Conversation unavailable"
-                      : "Loading conversation…"
-                    : "Ask about money, career or taxes…"
-              }
-              placeholderTextColor={colors.muted}
-              selectionColor={colors.blueDark}
-              onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
-              style={{
-                flex: 1,
-                color: colors.text,
-                height: inputHeight,
-                minHeight: 44,
-                maxHeight: 140,
-                fontSize: 17,
-                lineHeight: 24,
-                paddingHorizontal: 2,
-                paddingTop: 10,
-                paddingBottom: 10,
-                ...noFocusRing,
-              }}
-              multiline
-              editable
-              onKeyPress={
-                Platform.OS === "web"
-                  ? (event) => {
-                      if (
-                        event.nativeEvent.key === "Enter" &&
-                        !("shiftKey" in event.nativeEvent && event.nativeEvent.shiftKey)
-                      ) {
-                        event.preventDefault();
-                        send();
-                      }
-                    }
-                  : undefined
-              }
-            />
-            {!replying && (
-              <VoiceInputButton value={draft} onChange={setDraft} disabled={!loaded || !isReady} />
+                      <FileText size={14} color={colors.blueDark} />
+                      <Text
+                        numberOfLines={1}
+                        style={{ flexShrink: 1, fontSize: 12, color: colors.text }}
+                      >
+                        {f.name}
+                      </Text>
+                      <X size={13} color={colors.muted} />
+                    </Pressable>
+                  ))}
+              </View>
             )}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={replying ? "Stop reply" : "Send message"}
-              disabled={!replying && (!draft.trim() || !loaded || !isReady)}
-              onPress={replying ? () => void stop() : send}
-              style={({ pressed }) => ({
-                width: 44,
-                height: 44,
-                borderRadius: 24,
-                backgroundColor: replying || draft.trim() ? colors.blue : colors.neutral,
-                alignItems: "center",
-                justifyContent: "center",
-                transform: [{ scale: pressed ? 0.94 : 1 }],
-              })}
-            >
-              {replying ? (
-                <Square size={18} fill={colors.text} strokeWidth={0} />
-              ) : (
-                <ArrowUp
-                  size={25}
-                  strokeWidth={1.8}
-                  color={draft.trim() ? colors.text : colors.disabledIcon}
+            <View style={[s.row, { gap: 2, alignItems: "flex-end" }]}>
+              <TextInput
+                accessibilityLabel="Message Noa"
+                value={draft}
+                onChangeText={setDraft}
+                onContentSizeChange={(event) =>
+                  setInputHeight(Math.max(44, Math.min(132, event.nativeEvent.contentSize.height)))
+                }
+                placeholder={
+                  !isReady
+                    ? "Connecting…"
+                    : !loaded
+                      ? historyError
+                        ? "Conversation unavailable"
+                        : "Loading conversation…"
+                      : "Ask Noa"
+                }
+                placeholderTextColor={colors.muted}
+                selectionColor={colors.blueDark}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setFocused(false)}
+                style={{
+                  flex: 1,
+                  color: colors.text,
+                  height: inputHeight,
+                  minHeight: 44,
+                  maxHeight: 132,
+                  fontSize: 16,
+                  lineHeight: 22,
+                  paddingHorizontal: 0,
+                  paddingTop: 10,
+                  paddingBottom: 10,
+                  ...noFocusRing,
+                }}
+                multiline
+                editable
+                onKeyPress={
+                  Platform.OS === "web"
+                    ? (event) => {
+                        if (
+                          event.nativeEvent.key === "Enter" &&
+                          !("shiftKey" in event.nativeEvent && event.nativeEvent.shiftKey)
+                        ) {
+                          event.preventDefault();
+                          send();
+                        }
+                      }
+                    : undefined
+                }
+              />
+              {!replying && (
+                <VoiceInputButton
+                  value={draft}
+                  onChange={setDraft}
+                  disabled={!loaded || !isReady}
                 />
               )}
-            </Pressable>
+              {(replying || !!draft.trim()) && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={replying ? "Stop reply" : "Send message"}
+                  disabled={!replying && (!loaded || !isReady)}
+                  onPress={replying ? () => void stop() : send}
+                  style={({ pressed }) => ({
+                    width: 44,
+                    height: 44,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transform: [{ scale: pressed ? 0.94 : 1 }],
+                  })}
+                >
+                  <View
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 17,
+                      backgroundColor: colors.text,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {replying ? (
+                      <Square size={13} fill={colors.card} strokeWidth={0} />
+                    ) : (
+                      <ArrowUp size={20} strokeWidth={2.2} color={colors.card} />
+                    )}
+                  </View>
+                </Pressable>
+              )}
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>
