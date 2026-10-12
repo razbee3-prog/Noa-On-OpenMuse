@@ -41,9 +41,18 @@ export async function checkBrowserWorker(
     });
     const image = Buffer.from(await (await api(`/sessions/${id}/screenshot`)).arrayBuffer());
     assert.equal(image.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
-    assert.equal(image.readUInt32BE(16), 1280);
-    assert.equal(image.readUInt32BE(20), 800);
+    // Phone-shaped viewport (412×860) at 2× pixel density.
+    assert.equal(image.readUInt32BE(16), 824);
+    assert.ok(
+      Math.abs(image.readUInt32BE(20) - 1720) <= 2,
+      "screenshot is portrait, about 1720px tall",
+    );
     await api(`/sessions/${id}/input`, { type: "scroll", deltaY: 500 });
+    const tapped = await (
+      await api(`/sessions/${id}/input`, { type: "tap", x: 0.5, y: 0.5 })
+    ).json();
+    assert.equal(typeof tapped.editable, "boolean");
+    await api(`/sessions/${id}/input`, { type: "swipe", deltaY: 0.5 });
     const navigated = await (
       await api(`/sessions/${id}/navigate`, { url: `${fixtureOrigin}/other` })
     ).json();
