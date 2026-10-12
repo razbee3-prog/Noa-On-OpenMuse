@@ -199,7 +199,9 @@ export function BrowserView({
                   ? "Noa's browser"
                   : browser.status === "closed"
                     ? "Session saved"
-                    : "Needs attention"}
+                    : browser.status === "error"
+                      ? "Needs attention"
+                      : "Not open"}
             </Text>
           </View>
           {control ? (
