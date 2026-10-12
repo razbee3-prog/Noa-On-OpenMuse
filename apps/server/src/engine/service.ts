@@ -37,6 +37,7 @@ import { PlaidService } from "../plaid.ts";
 import { SearchService } from "../search.ts";
 import type { WorkspaceService } from "../workspace.ts";
 import { lateTasks } from "./completion.ts";
+import { consolidateDueMemories } from "./consolidate.ts";
 import { analyzeSpending } from "./finance.ts";
 import { recordFeedback, reviewDueLessons } from "./lessons.ts";
 import { executeModelTask } from "./model.ts";
@@ -124,6 +125,10 @@ export class AgentService {
         await reviewDueLessons(this.db, (system, user) =>
           generateText(reviewModel, system, user),
         ).catch((error) => backgroundFailure("review lessons", error));
+      if (reviewModel)
+        await consolidateDueMemories(this.db, (system, user) =>
+          generateText(reviewModel, system, user),
+        ).catch((error) => backgroundFailure("consolidate memory", error));
       await pruneOldNotes(this.db).catch((error) => backgroundFailure("prune notes", error));
       for (const { owner, value } of await this.db.scan<{ id: string; lastIdeasAt?: string }>(
         "agent-settings",

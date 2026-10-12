@@ -127,6 +127,7 @@ export interface AgentFile {
   updatedAt: string;
   updatedBy: "template" | "you" | "noa";
   lastTidiedAt?: string;
+  lastConsolidatedAt?: string;
 }
 export interface AgentWorkspace {
   tasks: AgentTask[];
