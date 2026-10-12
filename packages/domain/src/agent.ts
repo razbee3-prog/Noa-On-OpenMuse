@@ -27,7 +27,7 @@ export interface AgentTask {
   id: string;
   title: string;
   prompt: string;
-  kind: "agent" | "document" | "monitor" | "finance" | "plan";
+  kind: "agent" | "document" | "monitor" | "finance" | "plan" | "reminder";
   status: TaskStatus;
   goalId?: string;
   milestoneId?: string;
@@ -144,12 +144,16 @@ export interface AgentWorkspace {
 export const createTaskSchema = z.object({
   title: z.string().trim().min(1).max(160).optional(),
   prompt: z.string().trim().min(1).max(12000),
-  kind: z.enum(["agent", "document", "monitor", "finance", "plan"]).default("agent"),
+  kind: z.enum(["agent", "document", "monitor", "finance", "plan", "reminder"]).default("agent"),
   goalId: z.string().optional(),
   milestoneId: z.string().min(1).max(200).optional(),
   input: z.record(z.string(), z.unknown()).default({}),
 });
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
+export const reminderInputSchema = z.object({
+  at: z.iso.datetime({ offset: true }),
+  repeat: z.enum(["none", "daily", "weekly"]).default("none"),
+});
 export const monitorInputSchema = z
   .object({
     title: z.string().min(1).max(160),
