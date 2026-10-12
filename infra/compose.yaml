@@ -34,6 +34,7 @@ services:
       AGENT_BACKEND: model
       MODEL: ${MODEL:-anthropic/claude-sonnet-5-5}
       MODEL_DEEP: ${MODEL_DEEP:-anthropic/claude-opus-5-5}
+      MODEL_FAST: ${MODEL_FAST:-anthropic/claude-haiku-5-5}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY}
       CPK_INTELLIGENCE_API_KEY: ${CPK_INTELLIGENCE_API_KEY:?set CPK_INTELLIGENCE_API_KEY}
       CPK_TELEMETRY_ID: ${CPK_TELEMETRY_ID:-}

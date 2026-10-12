@@ -38,6 +38,7 @@ import { SearchService } from "../search.ts";
 import type { WorkspaceService } from "../workspace.ts";
 import { lateTasks } from "./completion.ts";
 import { analyzeSpending } from "./finance.ts";
+import { recordFeedback, reviewDueLessons } from "./lessons.ts";
 import { executeModelTask } from "./model.ts";
 import { appendDailyNote, pruneOldNotes } from "./notes.ts";
 import {
@@ -48,6 +49,7 @@ import {
   withoutRelativeTimes,
 } from "./page-diff.ts";
 import { loadMemory, loadSoul, tidyDueMemories } from "./soul-memory.ts";
+import { generateText } from "./tanstack-agent.ts";
 import { LostLeaseError, type TaskContext, TaskWorker } from "./worker.ts";
 
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -117,6 +119,11 @@ export class AgentService {
           });
       await tidyDueMemories(this.db).catch((error) => backgroundFailure("tidy memory", error));
       await this.auditLate().catch((error) => backgroundFailure("audit late work", error));
+      const reviewModel = this.config.modelFast ?? this.config.model;
+      if (reviewModel)
+        await reviewDueLessons(this.db, (system, user) =>
+          generateText(reviewModel, system, user),
+        ).catch((error) => backgroundFailure("review lessons", error));
       await pruneOldNotes(this.db).catch((error) => backgroundFailure("prune notes", error));
       for (const { owner, value } of await this.db.scan<{ id: string; lastIdeasAt?: string }>(
         "agent-settings",
@@ -1065,6 +1072,12 @@ export class AgentService {
         }
       }
     } else if (task.status === "failed") {
+      await recordFeedback(
+        this.db,
+        owner,
+        "failure",
+        `${task.title}: ${task.error ?? "failed"}`,
+      ).catch(() => {});
       await this.notify(
         owner,
         "Task needs attention",

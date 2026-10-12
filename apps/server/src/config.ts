@@ -43,6 +43,7 @@ export interface Config {
   model?: string;
   /** Stronger model a struggling task moves up to. */
   modelDeep?: string;
+  modelFast?: string;
   jevMode?: "off" | "sample" | "live";
   typesafeApiKey?: string;
   jevModel?: string;
@@ -172,6 +173,7 @@ export function readConfig(): Config {
     encryptionKey: process.env.TOKEN_ENCRYPTION_KEY,
     model: process.env.MODEL,
     modelDeep: process.env.MODEL_DEEP?.trim() || undefined,
+    modelFast: process.env.MODEL_FAST?.trim() || undefined,
     jevMode,
     typesafeApiKey,
     jevModel: process.env.JEV_MODEL?.trim() || defaultJevModel,

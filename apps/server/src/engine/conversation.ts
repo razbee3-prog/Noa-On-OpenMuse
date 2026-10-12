@@ -27,6 +27,7 @@ import { presentChoicesTool } from "../jev/tools.ts";
 import { searchDescription, searchInputSchema, searchInstructions } from "../search.ts";
 import { clockContext } from "./clock.ts";
 import { honestyRules } from "./honesty.ts";
+import { looksLikeCorrection, recordFeedback } from "./lessons.ts";
 import { appendDailyNote, peopleNames, rememberPerson, searchMemory } from "./notes.ts";
 import type { AgentService } from "./service.ts";
 import {
@@ -99,6 +100,16 @@ export class ConversationAgent extends AbstractAgent {
         ? null
         : new JevService({ store: this.service.db, adapter: this.jevAdapter, mode: jevMode });
     const latestText = typeof latest?.content === "string" ? latest.content : "";
+    if (!choiceContinuation && looksLikeCorrection(latestText)) {
+      const before = input.messages.slice(0, input.messages.indexOf(latest as never));
+      const said = before.filter((m) => m.role === "assistant").at(-1)?.content;
+      void recordFeedback(
+        this.service.db,
+        this.owner,
+        "correction",
+        `Person said: ${latestText.slice(0, 300)}${typeof said === "string" ? ` | Noa had said: ${said.slice(0, 200)}` : ""}`,
+      ).catch(() => {});
+    }
     if (latestText && !latestText.startsWith(jevActionPrefix) && !choiceContinuation)
       void appendDailyNote(this.service.db, this.owner, `You said: ${latestText}`).catch(() => {});
     if (latestText.startsWith(jevActionPrefix))
