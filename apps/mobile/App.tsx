@@ -1,5 +1,6 @@
 import { CopilotKitProvider } from "@copilotkit/react-native/headless";
 import * as AppleAuthentication from "expo-apple-authentication";
+import { BlurView } from "expo-blur";
 import { StatusBar } from "expo-status-bar";
 import {
   Bell,
@@ -21,11 +22,12 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from "react-native";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Section, Workspace } from "../../packages/domain/src";
 import { AgentComputerButton } from "./src/agent-computer-button";
 import {
@@ -45,8 +47,10 @@ import {
   sessionStillValid,
 } from "./src/api";
 import { ChatScreen, WorkspaceTools } from "./src/chat";
+import { ChromeContext } from "./src/chrome";
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
+import { tapHaptic } from "./src/haptics";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
 import { onSignedOut } from "./src/session-events";
 import { clearSession, loadSession, saveSession } from "./src/session-store";
@@ -334,8 +338,16 @@ function WorkspaceShell({
   } = useMuseThread();
   const [threadsOpen, setThreadsOpen] = useState(false);
   const keyboardVisible = useKeyboardVisible();
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const desktop = width >= 900;
+  const [headerHeight, setHeaderHeight] = useState(insets.top + 96);
+  const [navHeight, setNavHeight] = useState(72);
+  const navHidden = keyboardVisible && !desktop;
+  const chrome = useMemo(
+    () => ({ top: headerHeight, bottom: navHidden ? 0 : navHeight }),
+    [headerHeight, navHeight, navHidden],
+  );
   const pending =
     (data?.notifications.filter((n) => !n.read).length || 0) +
     workspace.actions.filter((a) => a.status === "awaiting_review").length;
@@ -353,7 +365,9 @@ function WorkspaceShell({
         : activeTask.plan.find((step) => step.status === "running")?.title || activeTask.title
     : data?.tasks.some((task) => task.status === "queued")
       ? "Picking up your next task…"
-      : "Here when you need me";
+      : richThreads && !threadsLoading && selection.id !== mainId
+        ? "Side chat"
+        : "";
   const title = titles[section] || titles.apps;
   const Screen =
     section === "mail"
@@ -375,127 +389,47 @@ function WorkspaceShell({
   return (
     <>
       <WorkspaceTools />
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "bottom"]}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={{ flex: 1, width: "100%", maxWidth: 760, alignSelf: "center" }}
-        >
-          <View
-            style={{
-              minHeight: 60,
-              marginHorizontal: 16,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 8,
-            }}
+      <ChromeContext.Provider value={chrome}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["left", "right"]}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={{ flex: 1, width: "100%", maxWidth: 760, alignSelf: "center" }}
           >
-            <IconButton
-              icon={Menu}
-              label="Open conversations and menu"
-              onPress={() => setThreadsOpen(true)}
-            />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${agentName} activity and approvals`}
-              onPress={() => navigate("activity")}
-              style={({ pressed }) => ({
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 8,
-                minHeight: 44,
-                flexShrink: 1,
-                paddingHorizontal: 6,
-                opacity: pressed ? 0.65 : 1,
-              })}
-            >
-              <Mascot size={34} variant={data?.identity.avatar} />
-              <View style={{ flexShrink: 1 }}>
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    fontSize: 16,
-                    fontWeight: "600",
-                    color: colors.text,
-                    letterSpacing: -0.3,
+            <View style={{ flex: 1, minHeight: 0 }}>
+              {section !== "chat" && (
+                <ScrollView
+                  key={section}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{
+                    paddingHorizontal: desktop ? 42 : 22,
+                    paddingTop: chrome.top + 8,
+                    paddingBottom: chrome.bottom + 28,
                   }}
+                  keyboardShouldPersistTaps="handled"
                 >
-                  {agentName}
-                </Text>
-                {section === "chat" && (
-                  <Text numberOfLines={1} style={{ fontSize: 12, color: colors.muted }}>
-                    {status}
-                  </Text>
-                )}
-              </View>
-            </Pressable>
-            <AgentComputerButton />
-            <View>
-              <IconButton
-                icon={Bell}
-                label={`Notifications, ${pending} unread or pending`}
-                onPress={() => open({ type: "notifications" })}
-              />
-              {pending > 0 && (
-                <View
-                  pointerEvents="none"
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: 4,
-                    position: "absolute",
-                    top: 7,
-                    right: 9,
-                    backgroundColor: colors.blueDark,
-                  }}
-                />
-              )}
-            </View>
-          </View>
-          <View style={{ flex: 1, minHeight: 0 }}>
-            {section !== "chat" && (
-              <ScrollView
-                key={section}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: desktop ? 42 : 22, paddingBottom: 28 }}
-                keyboardShouldPersistTaps="handled"
-              >
-                {utility && (
-                  <Button
-                    small
-                    style={{ alignSelf: "flex-start", marginBottom: 18 }}
-                    onPress={() => navigate("apps")}
-                  >
-                    Back to Apps
-                  </Button>
-                )}
-                <Text style={[s.title, { fontSize: 25, marginBottom: 22 }]}>{title?.title}</Text>
-                <ErrorNotice error={error} />
-                <Screen />
-              </ScrollView>
-            )}
-            <View
-              style={{
-                display: section === "chat" ? "flex" : "none",
-                flex: 1,
-                paddingHorizontal: desktop ? 42 : 17,
-              }}
-            >
-              <AgentStatus />
-              {richThreads ? (
-                <>
-                  <ErrorNotice error={threadsError} />
-                  {threadsError ? (
-                    <Button onPress={retryThreads}>Retry main chat</Button>
-                  ) : threadsLoading ? (
-                    <ActivityIndicator color={colors.blueDark} />
-                  ) : null}
-                  {!threadsLoading && selection.id !== mainId && (
-                    <Text style={[s.small, { textAlign: "center", marginBottom: 8 }]}>
-                      Side chat
-                    </Text>
+                  {utility && (
+                    <Button
+                      small
+                      style={{ alignSelf: "flex-start", marginBottom: 18 }}
+                      onPress={() => navigate("apps")}
+                    >
+                      Back to Apps
+                    </Button>
                   )}
-                  {visited.map((thread) => (
+                  <Text style={[s.title, { fontSize: 25, marginBottom: 22 }]}>{title?.title}</Text>
+                  <ErrorNotice error={error} />
+                  <Screen />
+                </ScrollView>
+              )}
+              <View
+                style={{
+                  display: section === "chat" ? "flex" : "none",
+                  flex: 1,
+                  paddingHorizontal: desktop ? 42 : 17,
+                }}
+              >
+                {richThreads ? (
+                  visited.map((thread) => (
                     <View
                       key={thread.id}
                       style={{ display: selection.id === thread.id ? "flex" : "none", flex: 1 }}
@@ -506,130 +440,265 @@ function WorkspaceShell({
                         prompt={selection.id === thread.id ? prompt : undefined}
                       />
                     </View>
-                  ))}
-                </>
-              ) : (
-                <ChatScreen prompt={prompt} active={section === "chat"} />
-              )}
+                  ))
+                ) : (
+                  <ChatScreen prompt={prompt} active={section === "chat"} />
+                )}
+              </View>
             </View>
-          </View>
-          <View
-            style={{
-              display: keyboardVisible && !desktop ? "none" : "flex",
-              paddingHorizontal: 22,
-              paddingTop: 10,
-              paddingBottom: desktop ? 22 : 7,
-              alignItems: "center",
-            }}
-          >
             <View
-              style={{
-                flexDirection: "row",
-                width: "100%",
-                maxWidth: 370,
-                padding: 5,
-                backgroundColor: colors.text,
-                borderRadius: 40,
-                shadowColor: colors.text,
-                shadowOffset: { width: 0, height: 6 },
-                shadowOpacity: 0.22,
-                shadowRadius: 20,
-                elevation: 8,
-              }}
+              onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
+              style={{ position: "absolute", top: 0, left: 0, right: 0 }}
             >
-              {nav.map((item) => {
-                const active = section === item.id || (item.id === "apps" && utility);
-                return (
+              <BlurView intensity={30} tint="light" style={StyleSheet.absoluteFillObject} />
+              <View
+                pointerEvents="none"
+                style={[StyleSheet.absoluteFillObject, { backgroundColor: colors.headerGlass }]}
+              />
+              <View style={{ paddingTop: insets.top + 6, paddingHorizontal: 16, paddingBottom: 8 }}>
+                <View
+                  style={{
+                    minHeight: 84,
+                    flexDirection: "row",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <IconButton
+                    floating
+                    icon={Menu}
+                    label="Open conversations and menu"
+                    onPress={() => setThreadsOpen(true)}
+                  />
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <AgentComputerButton />
+                    <View>
+                      <IconButton
+                        floating
+                        icon={Bell}
+                        label={`Notifications, ${pending} unread or pending`}
+                        onPress={() => open({ type: "notifications" })}
+                      />
+                      {pending > 0 && (
+                        <View
+                          pointerEvents="none"
+                          style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: 4,
+                            position: "absolute",
+                            top: 7,
+                            right: 9,
+                            backgroundColor: colors.blueDark,
+                          }}
+                        />
+                      )}
+                    </View>
+                  </View>
+                </View>
+                <View
+                  pointerEvents="box-none"
+                  style={{
+                    position: "absolute",
+                    top: insets.top + 2,
+                    left: 0,
+                    right: 0,
+                    alignItems: "center",
+                  }}
+                >
                   <Pressable
-                    key={item.id}
-                    accessibilityRole="tab"
-                    accessibilityLabel={item.label}
-                    accessibilityState={{ selected: active }}
-                    onPress={() => navigate(item.id)}
-                    style={{
-                      flex: 1,
-                      minHeight: 52,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 2,
-                      backgroundColor: active ? colors.onDarkActive : "transparent",
-                      borderRadius: 28,
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${agentName} activity and approvals`}
+                    onPress={() => {
+                      tapHaptic();
+                      navigate("activity");
                     }}
+                    style={({ pressed }) => ({
+                      alignItems: "center",
+                      maxWidth: 220,
+                      opacity: pressed ? 0.7 : 1,
+                    })}
                   >
-                    <item.icon
-                      size={21}
-                      strokeWidth={active ? 2.1 : 1.8}
-                      color={active ? colors.onDark : colors.onDarkMuted}
-                    />
-                    <Text
-                      numberOfLines={1}
+                    <Mascot size={58} variant={data?.identity.avatar} />
+                    <View
                       style={{
-                        fontSize: 11,
-                        fontWeight: active ? "600" : "500",
-                        color: active ? colors.onDark : colors.onDarkMuted,
+                        marginTop: -8,
+                        paddingHorizontal: 13,
+                        paddingVertical: 5,
+                        borderRadius: 16,
+                        alignItems: "center",
+                        backgroundColor: colors.card,
+                        shadowColor: colors.shadow,
+                        shadowOpacity: 0.1,
+                        shadowRadius: 10,
+                        shadowOffset: { width: 0, height: 2 },
+                        elevation: 2,
                       }}
                     >
-                      {item.label}
-                    </Text>
+                      <Text
+                        numberOfLines={1}
+                        style={{
+                          fontSize: 15,
+                          fontWeight: "600",
+                          color: colors.text,
+                          letterSpacing: -0.2,
+                        }}
+                      >
+                        {agentName}
+                      </Text>
+                      {section === "chat" && !!status && (
+                        <Text numberOfLines={1} style={{ fontSize: 12, color: colors.muted }}>
+                          {status}
+                        </Text>
+                      )}
+                    </View>
                   </Pressable>
-                );
-              })}
+                </View>
+                {section === "chat" && (
+                  <>
+                    <AgentStatus />
+                    {richThreads && <ErrorNotice error={threadsError} />}
+                    {richThreads && threadsError ? (
+                      <Button onPress={retryThreads}>Retry main chat</Button>
+                    ) : richThreads && threadsLoading ? (
+                      <ActivityIndicator color={colors.blueDark} />
+                    ) : null}
+                  </>
+                )}
+              </View>
             </View>
-          </View>
-        </KeyboardAvoidingView>
-        {!!toast && (
-          <View
-            pointerEvents="box-none"
-            style={{ position: "absolute", bottom: 94, left: 20, right: 20, alignItems: "center" }}
-          >
-            <View
-              style={[
-                s.row,
-                {
-                  gap: 10,
-                  padding: 14,
-                  backgroundColor: colors.text,
-                  borderRadius: 20,
-                  maxWidth: 560,
-                },
-              ]}
-            >
-              <Check size={16} color={colors.blue} />
-              <Text style={{ color: colors.onDark, fontSize: 13, flexShrink: 1 }}>{toast}</Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Dismiss notification"
-                onPress={clearToast}
+            {!navHidden && (
+              <View
+                onLayout={(event) => setNavHeight(event.nativeEvent.layout.height)}
+                pointerEvents="box-none"
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  paddingHorizontal: 10,
+                  paddingBottom: desktop ? 22 : Math.max(insets.bottom - 10, 8),
+                  alignItems: "center",
+                }}
               >
-                <X size={16} color={colors.onDark} />
-              </Pressable>
+                <View
+                  style={{
+                    width: "100%",
+                    borderRadius: 34,
+                    shadowColor: colors.shadow,
+                    shadowOffset: { width: 0, height: 6 },
+                    shadowOpacity: 0.12,
+                    shadowRadius: 22,
+                    elevation: 6,
+                  }}
+                >
+                  <View style={{ borderRadius: 34, overflow: "hidden" }}>
+                    <BlurView intensity={40} tint="light" style={StyleSheet.absoluteFillObject} />
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        padding: 6,
+                        borderRadius: 34,
+                        borderWidth: 1,
+                        borderColor: colors.glassLine,
+                        backgroundColor: colors.navGlass,
+                      }}
+                    >
+                      {nav.map((item) => {
+                        const active = section === item.id || (item.id === "apps" && utility);
+                        return (
+                          <Pressable
+                            key={item.id}
+                            accessibilityRole="tab"
+                            accessibilityLabel={item.label}
+                            accessibilityState={{ selected: active }}
+                            onPress={() => {
+                              tapHaptic();
+                              navigate(item.id);
+                            }}
+                            style={{
+                              flex: 1,
+                              minHeight: 54,
+                              alignItems: "center",
+                              justifyContent: "center",
+                              backgroundColor: active ? colors.navActive : "transparent",
+                              borderRadius: 28,
+                            }}
+                          >
+                            <item.icon
+                              size={24}
+                              strokeWidth={active ? 2 : 1.7}
+                              color={active ? colors.text : colors.muted}
+                            />
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </View>
+              </View>
+            )}
+          </KeyboardAvoidingView>
+          {!!toast && (
+            <View
+              pointerEvents="box-none"
+              style={{
+                position: "absolute",
+                bottom: chrome.bottom + 14,
+                left: 20,
+                right: 20,
+                alignItems: "center",
+              }}
+            >
+              <View
+                style={[
+                  s.row,
+                  {
+                    gap: 10,
+                    padding: 14,
+                    backgroundColor: colors.text,
+                    borderRadius: 20,
+                    maxWidth: 560,
+                  },
+                ]}
+              >
+                <Check size={16} color={colors.blue} />
+                <Text style={{ color: colors.onDark, fontSize: 13, flexShrink: 1 }}>{toast}</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Dismiss notification"
+                  onPress={clearToast}
+                >
+                  <X size={16} color={colors.onDark} />
+                </Pressable>
+              </View>
             </View>
-          </View>
-        )}
-        {threadsOpen && <ThreadsSheet onClose={() => setThreadsOpen(false)} />}
-        {detail && (
-          <Details
-            key={
-              detail.type === "task"
-                ? detail.taskId
-                : detail.type === "file"
-                  ? detail.file.id
-                  : detail.type === "browser"
-                    ? detail.browser.id
-                    : detail.type === "mail"
-                      ? detail.mail.id
-                      : detail.type === "review"
-                        ? detail.action.id
-                        : detail.type === "email"
-                          ? JSON.stringify(detail.draft)
-                          : detail.type === "event"
-                            ? detail.event?.id || "event-new"
-                            : detail.type
-            }
-            detail={detail}
-          />
-        )}
-      </SafeAreaView>
+          )}
+          {threadsOpen && <ThreadsSheet onClose={() => setThreadsOpen(false)} />}
+          {detail && (
+            <Details
+              key={
+                detail.type === "task"
+                  ? detail.taskId
+                  : detail.type === "file"
+                    ? detail.file.id
+                    : detail.type === "browser"
+                      ? detail.browser.id
+                      : detail.type === "mail"
+                        ? detail.mail.id
+                        : detail.type === "review"
+                          ? detail.action.id
+                          : detail.type === "email"
+                            ? JSON.stringify(detail.draft)
+                            : detail.type === "event"
+                              ? detail.event?.id || "event-new"
+                              : detail.type
+              }
+              detail={detail}
+            />
+          )}
+        </SafeAreaView>
+      </ChromeContext.Provider>
     </>
   );
 }

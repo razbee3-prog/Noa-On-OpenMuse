@@ -55,6 +55,7 @@ export function AgentComputerButton() {
   return (
     <View>
       <IconButton
+        floating
         icon={Monitor}
         label={
           !available

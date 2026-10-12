@@ -2,6 +2,7 @@ import { Check, ExternalLink } from "lucide-react-native";
 import { createContext, useContext, useRef, useState } from "react";
 import { ActivityIndicator, Linking, Pressable, Text, View } from "react-native";
 import type { JevOption, JevPanel } from "../../../packages/domain/src/jev";
+import { tapHaptic } from "./haptics";
 import {
   choiceAvailability,
   parseJevResult,
@@ -95,15 +96,38 @@ function ChoiceButton({
     );
   }
   return (
-    <Button
-      small
-      disabled={disabled}
-      busy={pending}
-      icon={selected ? Check : undefined}
-      onPress={() => onChoose(option.id)}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={option.label}
+      accessibilityState={{ disabled: disabled || pending, busy: pending, selected }}
+      disabled={disabled || pending}
+      onPress={() => {
+        tapHaptic();
+        onChoose(option.id);
+      }}
+      style={({ pressed }) => [
+        s.row,
+        {
+          gap: 10,
+          minHeight: 46,
+          paddingHorizontal: 14,
+          paddingVertical: 11,
+          borderRadius: 8,
+          borderWidth: 1,
+          borderStyle: selected ? "solid" : "dashed",
+          borderColor: selected ? colors.text : colors.handle,
+          backgroundColor: pressed ? colors.line : "transparent",
+        },
+        disabled && !selected && { opacity: 0.55 },
+      ]}
     >
-      {option.label}
-    </Button>
+      <Text style={[s.text, { flex: 1, fontSize: 16 }]}>{option.label}</Text>
+      {pending ? (
+        <ActivityIndicator size="small" color={colors.text} />
+      ) : selected ? (
+        <Check size={16} color={colors.text} />
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -188,9 +212,25 @@ export function JevToolCard({ result, loading }: { result: unknown; loading: boo
   }
 
   return (
-    <Card style={{ width: "100%", maxWidth: 440, padding: 17, gap: 13 }}>
+    <Card
+      style={
+        panel.type === "clarification"
+          ? {
+              width: "100%",
+              maxWidth: 440,
+              padding: 15,
+              gap: 12,
+              borderRadius: 22,
+              borderWidth: 0,
+              backgroundColor: colors.neutral,
+            }
+          : { width: "100%", maxWidth: 440, padding: 17, gap: 13 }
+      }
+    >
       <View style={{ gap: 5 }}>
-        <Text style={s.heading}>{panel.title}</Text>
+        <Text style={panel.type === "clarification" ? [s.text, { fontSize: 16 }] : s.heading}>
+          {panel.title}
+        </Text>
         {panel.mode === "sample" && <Text style={s.small}>Sample · scripted decisions</Text>}
         {panel.mode === "live" && <Text style={s.small}>Live Jev · model decisions</Text>}
         {preferredOption && !selectedId && (
@@ -200,7 +240,7 @@ export function JevToolCard({ result, loading }: { result: unknown; loading: boo
         {selectedId && <Text style={s.small}>Choice submitted</Text>}
       </View>
       {panel.type === "clarification" ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        <View style={{ gap: 9 }}>
           {panel.options.map((option, index) => (
             <ChoiceButton
               key={option.id}

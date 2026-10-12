@@ -19,6 +19,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { tapHaptic } from "./haptics";
 export const colors = {
   canvas: "#FCFCFC",
   card: "#FFFFFF",
@@ -79,6 +80,10 @@ export const colors = {
   onDark: "#FFFFFF",
   onDarkMuted: "rgba(255,255,255,0.72)",
   onDarkActive: "rgba(255,255,255,0.16)",
+  headerGlass: "rgba(252,252,252,0.72)",
+  navGlass: "rgba(249,249,246,0.86)",
+  navActive: "rgba(17,25,28,0.07)",
+  glassLine: "rgba(17,25,28,0.06)",
   moneyPositive: "#1B7A43",
   moneyNegative: "#B3261E",
 };
@@ -228,7 +233,10 @@ export function Button({
       accessibilityRole="button"
       disabled={disabled || busy}
       accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy, selected }}
-      onPress={onPress}
+      onPress={() => {
+        tapHaptic();
+        onPress();
+      }}
       style={({ pressed }) => [
         s.button,
         primary ? s.primary : selected ? s.selected : quiet ? s.quiet : s.secondary,
@@ -253,16 +261,21 @@ export function IconButton({
   icon: Icon,
   label,
   onPress,
+  floating,
 }: {
   icon: LucideIcon;
   label: string;
   onPress: () => void;
+  floating?: boolean;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      onPress={onPress}
+      onPress={() => {
+        tapHaptic();
+        onPress();
+      }}
       style={({ pressed }) => [
         {
           width: 44,
@@ -271,6 +284,13 @@ export function IconButton({
           justifyContent: "center",
           borderRadius: 22,
           backgroundColor: pressed ? colors.line : colors.card,
+        },
+        floating && {
+          shadowColor: colors.shadow,
+          shadowOpacity: 0.1,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 3 },
+          elevation: 3,
         },
       ]}
     >

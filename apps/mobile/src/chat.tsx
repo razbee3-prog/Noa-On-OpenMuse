@@ -12,8 +12,6 @@ import {
   ArrowUp,
   ChevronDown,
   ChevronRight,
-  FileText,
-  Plus,
   RotateCcw,
   Square,
   X,
@@ -44,6 +42,7 @@ import { splitReply } from "./assistant-markdown";
 import { AssistantResponse } from "./assistant-response";
 import { BackgroundUpdates } from "./background-updates";
 import { BrowserRunContext, BrowserToolCard } from "./browser-tool-card";
+import { useChrome } from "./chrome";
 import { BrowserThreadCard } from "./computer";
 import { ConnectToolCard } from "./connect-card";
 import { ConversationQueue, type QueuedMessage } from "./conversation-queue";
@@ -55,14 +54,17 @@ import {
   threadLocked,
 } from "./conversation-run";
 import { DesktopToolCard } from "./desktop-tool-card";
+import { replyHaptic, tapHaptic } from "./haptics";
 import { confirmedJevSelection, displayJevUserMessage, latestJevPanelId } from "./jev-actions";
 import { JevInteractionContext, JevToolCard } from "./jev-tool-card";
 import { MailToolCard } from "./mail-tool-card";
 import { SearchToolCard } from "./search-tool-card";
 import { SignInToolCard } from "./sign-in-card";
+import { availableBubbles, nextReveal, type StagedMessage } from "./staged-reply";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
-import { Button, Card, CheckRow, colors, ErrorNotice, Mascot, s } from "./ui";
+import { TypingDots } from "./typing-dots";
+import { Button, Card, colors, ErrorNotice, s } from "./ui";
 import { VoiceInputButton } from "./voice-input";
 import { useWorkspace } from "./workspace";
 
@@ -299,8 +301,11 @@ export function ChatScreen({
   const [loaded, setLoaded] = useState(false);
   // Replayed messages show before connectAgent returns; new turns wait until it does.
   const [syncing, setSyncing] = useState(false);
-  const [picking, setPicking] = useState(false);
-  const [attachments, setAttachments] = useState<string[]>([]);
+  const chrome = useChrome();
+  const [composerHeight, setComposerHeight] = useState(62);
+  // Bubble counts revealed so far for replies that arrived while this screen watched.
+  const [revealed, setRevealed] = useState<Record<string, number>>({});
+  const seen = useRef(new Map<string, boolean>());
   const list = useRef<ScrollView>(null);
   const [queue] = useState(() => new ConversationQueue());
   const choiceCompletions = useRef(
@@ -541,17 +546,10 @@ export function ChatScreen({
     if (!busy && !agent.isRunning && !saveError && !queue.getSnapshot().pending.length)
       queue.resume();
     setShowResults(false);
-    const files = w.files.filter((f) => attachments.includes(f.id));
-    enqueue(
-      text +
-        (files.length
-          ? `\n\nAttached documents: ${files.map((f) => `${f.name} (artifact ID: ${f.id})`).join(", ")}`
-          : ""),
-    );
+    tapHaptic();
+    enqueue(text);
     setDraft("");
     setInputHeight(44);
-    setAttachments([]);
-    setPicking(false);
     Keyboard.dismiss();
   }
   const messages = agent.messages || [];
@@ -570,12 +568,43 @@ export function ChatScreen({
     .filter((call) => call.function.name === "use_desktop")
     .at(-1)?.id;
   const replying = busy || agent.isRunning;
+  const isTable = (part: string) => /\n\s*\||```/.test(part);
+  const replyText = (message: Message) =>
+    typeof message.content === "string" ? message.content : "";
+  const lastVisible = visible.at(-1)?.id;
+  for (const message of visible)
+    if (message.role === "assistant" && !seen.current.has(message.id))
+      seen.current.set(message.id, busy && messages.indexOf(message) > latestUserIndex);
+  const staged: StagedMessage[] = visible
+    .filter((message) => seen.current.get(message.id))
+    .map((message) => ({
+      id: message.id,
+      available: availableBubbles(
+        splitReply(replyText(message)).length,
+        replying && message.id === lastVisible,
+      ),
+      shown: revealed[message.id] || 0,
+    }));
+  const reveal = nextReveal(staged);
+  useEffect(() => {
+    if (!reveal) return;
+    const timer = setTimeout(() => {
+      setRevealed((counts) => ({ ...counts, [reveal.id]: (counts[reveal.id] || 0) + 1 }));
+      replyHaptic();
+    }, reveal.delay);
+    return () => clearTimeout(timer);
+  }, [reveal?.id, reveal?.delay, revealed]);
   return (
     <View style={{ flex: 1 }}>
       <ScrollView
         ref={list}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ gap: 13, paddingTop: 15, paddingBottom: 20, flexGrow: 1 }}
+        contentContainerStyle={{
+          gap: 13,
+          paddingTop: chrome.top + 12,
+          paddingBottom: chrome.bottom + composerHeight + 16,
+          flexGrow: 1,
+        }}
         onScroll={({ nativeEvent: { contentOffset, contentSize, layoutMeasurement } }) => {
           const nearEnd = contentSize.height - contentOffset.y - layoutMeasurement.height < 100;
           followLatest.current = nearEnd;
@@ -638,18 +667,18 @@ export function ChatScreen({
         ) : (
           visible.map((message) => {
             const user = message.role === "user";
-            const text =
-              typeof message.content === "string"
-                ? user
-                  ? displayJevUserMessage(
-                      message.content,
-                      messages.slice(0, messages.indexOf(message)),
-                    )
-                  : message.content
-                : "";
+            const text = user
+              ? displayJevUserMessage(
+                  replyText(message),
+                  messages.slice(0, messages.indexOf(message)),
+                )
+              : replyText(message);
             const toolCalls = "toolCalls" in message ? message.toolCalls || [] : [];
-            const isTable = (part: string) => /\n\s*\||```/.test(part);
             const long = !user && isTable(text);
+            const parts = user ? [text].filter(Boolean) : splitReply(text);
+            const shownParts = seen.current.get(message.id)
+              ? parts.slice(0, revealed[message.id] || 0)
+              : parts;
             return (
               <View
                 key={message.id}
@@ -660,7 +689,7 @@ export function ChatScreen({
                   gap: 8,
                 }}
               >
-                {(user ? [text].filter(Boolean) : splitReply(text)).map((part, index) => {
+                {shownParts.map((part, index) => {
                   const wide = !user && isTable(part);
                   return (
                     <View
@@ -671,14 +700,11 @@ export function ChatScreen({
                         paddingHorizontal: wide ? 4 : 15,
                         paddingVertical: user ? 10 : wide ? 2 : 12,
                         borderRadius: 22,
-                        backgroundColor: user ? colors.text : wide ? "transparent" : colors.neutral,
+                        backgroundColor: user ? colors.blue : wide ? "transparent" : colors.neutral,
                       }}
                     >
                       {user ? (
-                        <Text
-                          selectable
-                          style={[s.text, { fontSize: 16, lineHeight: 23, color: colors.card }]}
-                        >
+                        <Text selectable style={[s.text, { fontSize: 16, lineHeight: 23 }]}>
                           {part}
                         </Text>
                       ) : (
@@ -807,18 +833,7 @@ export function ChatScreen({
           </>
         )}
         {(!richThreads || selection.id === mainId) && <BackgroundUpdates />}
-        {(busy || agent.isRunning) && (
-          <View
-            accessibilityLabel="Noa is working"
-            style={[
-              s.row,
-              { alignSelf: "flex-start", gap: 8, paddingHorizontal: 4, paddingVertical: 4 },
-            ]}
-          >
-            <Mascot size={24} />
-            <Text style={s.muted}>Noa is working…</Text>
-          </View>
-        )}
+        {(replying || !!reveal) && <TypingDots />}
         <ErrorNotice error={error} />
         {!!error && (
           <Button
@@ -838,38 +853,56 @@ export function ChatScreen({
         )}
       </ScrollView>
       {awayFromLatest && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Latest messages"
-          onPress={() => {
-            followLatest.current = true;
-            setAwayFromLatest(false);
-            list.current?.scrollToEnd({ animated: true });
-          }}
-          style={({ pressed }) => ({
-            alignSelf: "center",
-            width: 44,
-            height: 44,
-            borderRadius: 22,
-            marginBottom: 8,
+        <View
+          pointerEvents="box-none"
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: chrome.bottom + composerHeight + 4,
             alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: pressed ? colors.neutral : colors.card,
-            borderWidth: 1,
-            borderColor: colors.line,
-            shadowColor: colors.shadow,
-            shadowOpacity: 0.08,
-            shadowRadius: 10,
-            shadowOffset: { width: 0, height: 2 },
-            elevation: 2,
-          })}
+          }}
         >
-          <ArrowDown size={20} strokeWidth={1.8} color={colors.text} />
-        </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Latest messages"
+            onPress={() => {
+              followLatest.current = true;
+              setAwayFromLatest(false);
+              list.current?.scrollToEnd({ animated: true });
+            }}
+            style={({ pressed }) => ({
+              alignSelf: "center",
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              marginBottom: 8,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: pressed ? colors.neutral : colors.card,
+              borderWidth: 1,
+              borderColor: colors.line,
+              shadowColor: colors.shadow,
+              shadowOpacity: 0.08,
+              shadowRadius: 10,
+              shadowOffset: { width: 0, height: 2 },
+              elevation: 2,
+            })}
+          >
+            <ArrowDown size={20} strokeWidth={1.8} color={colors.text} />
+          </Pressable>
+        </View>
       )}
       <KeyboardAvoidingView
         enabled={false}
-        style={keyboardPadding > 0 ? { paddingBottom: keyboardPadding } : undefined}
+        onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: chrome.bottom,
+          paddingBottom: keyboardPadding,
+        }}
       >
         <ErrorNotice error={saveError} />
         {!!saveError && (
@@ -924,101 +957,25 @@ export function ChatScreen({
             )}
           </View>
         )}
-        {picking && (
-          <Card style={{ marginBottom: 12, padding: 15 }}>
-            <Text style={s.heading}>Add a document</Text>
-            <ScrollView style={{ maxHeight: 230 }} keyboardShouldPersistTaps="handled">
-              {w.files.length ? (
-                w.files.map((f) => (
-                  <CheckRow
-                    key={f.id}
-                    checked={attachments.includes(f.id)}
-                    label={f.name}
-                    onPress={() =>
-                      setAttachments(
-                        attachments.includes(f.id)
-                          ? attachments.filter((id) => id !== f.id)
-                          : [...attachments, f.id],
-                      )
-                    }
-                  />
-                ))
-              ) : (
-                <Text style={s.muted}>Import a PDF in Files to use it in a conversation.</Text>
-              )}
-            </ScrollView>
-            <Button
-              small
-              onPress={() => setPicking(false)}
-              style={{ alignSelf: "flex-end", marginTop: 8 }}
-            >
-              Done
-            </Button>
-          </Card>
-        )}
         <View style={[s.row, { gap: 8, alignItems: "flex-end", paddingTop: 4, paddingBottom: 8 }]}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Attach a document"
-            accessibilityState={{ expanded: picking }}
-            onPress={() => setPicking(!picking)}
-            style={({ pressed }) => ({
-              width: 46,
-              height: 46,
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 23,
-              backgroundColor: picking || pressed ? colors.sky : colors.neutral,
-            })}
-          >
-            <Plus size={22} strokeWidth={1.8} color={colors.text} />
-          </Pressable>
           <View
             style={{
               flex: 1,
-              minHeight: 46,
+              minHeight: 50,
               backgroundColor: colors.card,
-              borderRadius: 23,
+              borderRadius: 25,
               borderWidth: 1,
               borderColor: focused ? colors.focus : colors.line,
-              paddingLeft: 16,
-              paddingRight: 1,
+              paddingLeft: 18,
+              paddingRight: 3,
+              paddingVertical: 2,
+              shadowColor: colors.shadow,
+              shadowOpacity: 0.08,
+              shadowRadius: 14,
+              shadowOffset: { width: 0, height: 4 },
+              elevation: 3,
             }}
           >
-            {attachments.length > 0 && (
-              <View style={[s.row, { gap: 6, flexWrap: "wrap", padding: 9 }]}>
-                {w.files
-                  .filter((f) => attachments.includes(f.id))
-                  .map((f) => (
-                    <Pressable
-                      key={f.id}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Remove attachment: ${f.name}`}
-                      onPress={() => setAttachments((ids) => ids.filter((id) => id !== f.id))}
-                      style={[
-                        s.row,
-                        {
-                          gap: 7,
-                          maxWidth: "100%",
-                          backgroundColor: colors.sky,
-                          borderRadius: 16,
-                          paddingHorizontal: 11,
-                          paddingVertical: 8,
-                        },
-                      ]}
-                    >
-                      <FileText size={14} color={colors.blueDark} />
-                      <Text
-                        numberOfLines={1}
-                        style={{ flexShrink: 1, fontSize: 12, color: colors.text }}
-                      >
-                        {f.name}
-                      </Text>
-                      <X size={13} color={colors.muted} />
-                    </Pressable>
-                  ))}
-              </View>
-            )}
             <View style={[s.row, { gap: 2, alignItems: "flex-end" }]}>
               <TextInput
                 accessibilityLabel="Message Noa"
@@ -1034,7 +991,7 @@ export function ChatScreen({
                       ? historyError
                         ? "Conversation unavailable"
                         : "Loading conversation…"
-                      : "Ask Noa"
+                      : "Message"
                 }
                 placeholderTextColor={colors.muted}
                 selectionColor={colors.blueDark}
@@ -1095,15 +1052,15 @@ export function ChatScreen({
                       width: 34,
                       height: 34,
                       borderRadius: 17,
-                      backgroundColor: colors.text,
+                      backgroundColor: colors.blue,
                       alignItems: "center",
                       justifyContent: "center",
                     }}
                   >
                     {replying ? (
-                      <Square size={13} fill={colors.card} strokeWidth={0} />
+                      <Square size={13} fill={colors.text} strokeWidth={0} />
                     ) : (
-                      <ArrowUp size={20} strokeWidth={2.2} color={colors.card} />
+                      <ArrowUp size={20} strokeWidth={2.2} color={colors.text} />
                     )}
                   </View>
                 </Pressable>
