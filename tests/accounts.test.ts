@@ -64,7 +64,7 @@ const appleToken = (sub: string, audience = AUDIENCE) =>
     .setExpirationTime("10m")
     .sign(signKey);
 
-async function server(owner?: string, inviteRequired = true) {
+async function server(owner?: string) {
   const docker = fixture({ command: async () => ok("ran"), owner });
   const created = await createApp(
     db,
@@ -75,7 +75,6 @@ async function server(owner?: string, inviteRequired = true) {
       workerToken: "w".repeat(32),
       accessKey: "admin-access-key-for-tests-only",
       trustProxy: true,
-      inviteRequired,
     },
     { docker: docker.runner, appleVerifier: verify },
   );
@@ -94,14 +93,6 @@ async function adminToken(app: App) {
   });
   return (await response.json()).token as string;
 }
-async function invite(app: App) {
-  const response = await app.request("/api/invites", {
-    method: "POST",
-    headers: json(await adminToken(app)),
-  });
-  assert.equal(response.status, 201);
-  return (await response.json()).code as string;
-}
 function appleSignIn(app: App, body: Record<string, unknown>, ip = "10.0.0.2") {
   return app.request("/api/session/apple", {
     method: "POST",
@@ -112,44 +103,37 @@ function appleSignIn(app: App, body: Record<string, unknown>, ip = "10.0.0.2") {
 async function member(app: App, sub: string, name: string) {
   const response = await appleSignIn(app, {
     identityToken: await appleToken(sub),
-    inviteCode: await invite(app),
     fullName: name,
   });
   assert.equal(response.status, 200);
   return (await response.json()).token as string;
 }
 
-test("Apple sign-in requires a verified token and a one-time invite, and lasts 30 days", async () => {
+test("Apple sign-in needs a verified token, creates the account with no code, and lasts 30 days", async () => {
   const { app } = await server();
-  const noInvite = await appleSignIn(app, { identityToken: await appleToken("apple-new") });
-  assert.equal(noInvite.status, 403);
+  const health = await (await app.request("/api/health")).json();
+  assert.equal(health.inviteRequired, undefined);
   const wrongAudience = await appleSignIn(app, {
     identityToken: await appleToken("apple-new", "com.example.other"),
-    inviteCode: await invite(app),
   });
   assert.equal(wrongAudience.status, 401);
-  const code = await invite(app);
   const first = await appleSignIn(app, {
     identityToken: await appleToken("apple-new"),
-    inviteCode: code,
+    inviteCode: "NOA-OLDBU-ILD66",
   });
-  assert.equal(first.status, 200);
+  assert.equal(first.status, 200, "older app builds that still send a code keep working");
   const session = await first.json();
   assert.equal(session.role, "member");
   const ttl = Date.parse(session.expiresAt) - Date.now();
   assert.ok(Math.abs(ttl - SESSION_TTL_MS) < 60_000);
-  const reused = await appleSignIn(app, {
-    identityToken: await appleToken("apple-other"),
-    inviteCode: code,
-  });
-  assert.equal(reused.status, 403, "an invite works only once");
   const returning = await appleSignIn(app, { identityToken: await appleToken("apple-new") });
-  assert.equal(returning.status, 200, "existing accounts sign in without an invite");
-  const members = await app.request("/api/invites", {
+  assert.equal(returning.status, 200);
+  assert.equal((await returning.json()).role, "member");
+  const invites = await app.request("/api/invites", {
     method: "POST",
-    headers: json(session.token),
+    headers: json(await adminToken(app)),
   });
-  assert.equal(members.status, 403, "only the admin creates invites");
+  assert.equal(invites.status, 404, "invite codes no longer exist");
   const signOut = await app.request("/api/session", {
     method: "DELETE",
     headers: json(session.token),
@@ -323,14 +307,4 @@ test("the agent computer shows when Noa needs you, only to that account", async 
   });
   assert.equal((await read(json(alice))).site, "LinkedIn");
   assert.equal(await read(json(bob)), null);
-});
-
-test("with INVITE_REQUIRED off, Apple sign-in creates an account without a code", async () => {
-  const { app } = await server(undefined, false);
-  const health = await (await app.request("/api/health")).json();
-  assert.equal(health.inviteRequired, false);
-  const first = await appleSignIn(app, { identityToken: await appleToken("apple-open") });
-  assert.equal(first.status, 200);
-  const again = await appleSignIn(app, { identityToken: await appleToken("apple-open") });
-  assert.equal(again.status, 200);
 });

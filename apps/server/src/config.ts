@@ -55,8 +55,6 @@ export interface Config {
   workerToken?: string;
   taskWorkerEnabled?: boolean;
   webSearchEnabled?: boolean;
-  /** When true, new Apple accounts need a one-time invite code. */
-  inviteRequired?: boolean;
   computerEnabled?: boolean;
   computerImage?: string;
   computerDeploymentId?: string;
@@ -185,7 +183,6 @@ export function readConfig(): Config {
     workerToken: process.env.WORKER_TOKEN,
     taskWorkerEnabled: process.env.TASK_WORKER_ENABLED !== "false",
     webSearchEnabled: process.env.WEB_SEARCH_ENABLED !== "false",
-    inviteRequired: process.env.INVITE_REQUIRED === "true",
     computerEnabled: process.env.COMPUTER_ENABLED === "true",
     computerImage: process.env.COMPUTER_IMAGE ?? "openmuse-computer:local",
     computerDeploymentId: process.env.COMPUTER_DEPLOYMENT_ID,

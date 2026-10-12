@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, Linking, Platform, Share, Text, View } from "react-native";
-import { API_URL, useInviteRequired } from "./api";
+import { Alert, Linking, Platform, Text } from "react-native";
+import { API_URL } from "./api";
 import { signOutLocally } from "./session-store";
 import { Button, Card, ErrorNotice, Field, s } from "./ui";
 import { useWorkspace } from "./workspace";
@@ -12,13 +12,11 @@ interface AccountInfo {
   role: "admin" | "member";
 }
 
-/** Display name, privacy policy, sign out, account deletion and (for the admin) one-time invite codes. */
+/** Display name, privacy policy, sign out, account deletion. */
 export function AccountCard() {
-  const inviteRequired = useInviteRequired();
   const { api, refresh, notify } = useWorkspace();
   const [account, setAccount] = useState<AccountInfo>();
   const [name, setName] = useState("");
-  const [invite, setInvite] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -63,30 +61,6 @@ export function AccountCard() {
       >
         Save name
       </Button>
-      {account.role === "admin" && inviteRequired ? (
-        <View style={{ gap: 8 }}>
-          <Button
-            busy={busy}
-            onPress={() =>
-              void run(async () => {
-                const created = await api.request<{ code: string }>("/api/invites", {});
-                setInvite(created.code);
-              })
-            }
-          >
-            Create invite
-          </Button>
-          {invite ? (
-            <>
-              <Text selectable style={[s.text, { fontWeight: "600", letterSpacing: 1 }]}>
-                {invite}
-              </Text>
-              <Text style={s.small}>Works once, for one new account, within 14 days.</Text>
-              <Button onPress={() => void Share.share({ message: invite })}>Share invite</Button>
-            </>
-          ) : null}
-        </View>
-      ) : null}
       <Button
         quiet
         onPress={() =>
