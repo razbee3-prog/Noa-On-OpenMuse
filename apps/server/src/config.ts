@@ -41,6 +41,8 @@ export interface Config {
   nango?: { secretKey: string; baseUrl: string; approvedConnectors: string[] };
   encryptionKey?: string;
   model?: string;
+  /** Stronger model a struggling task moves up to. */
+  modelDeep?: string;
   jevMode?: "off" | "sample" | "live";
   typesafeApiKey?: string;
   jevModel?: string;
@@ -169,6 +171,7 @@ export function readConfig(): Config {
       .filter(Boolean),
     encryptionKey: process.env.TOKEN_ENCRYPTION_KEY,
     model: process.env.MODEL,
+    modelDeep: process.env.MODEL_DEEP?.trim() || undefined,
     jevMode,
     typesafeApiKey,
     jevModel: process.env.JEV_MODEL?.trim() || defaultJevModel,
