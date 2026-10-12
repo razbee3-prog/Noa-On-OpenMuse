@@ -18,6 +18,7 @@ import {
 } from "../connector-tools.ts";
 import { searchDescription, searchInputSchema, searchInstructions } from "../search.ts";
 import { clockContext } from "./clock.ts";
+import { unmetChecks } from "./completion.ts";
 import { nextTier, taskModel } from "./models.ts";
 import type { AgentService } from "./service.ts";
 import { personaContext } from "./soul-memory.ts";
@@ -407,16 +408,36 @@ export async function executeModelTask(
     ),
     tool(
       "finish_task",
-      "Finish only when the requested outcome is actually achieved",
-      z.object({ summary: z.string().min(1).max(8000) }),
-      async ({ summary }) => {
+      "Finish only when the requested outcome is actually achieved. List every requirement from the original request, whether it is met, and the concrete evidence (tool result, source, record ID). Unmet requirements keep the task open.",
+      z.object({
+        summary: z.string().min(1).max(8000),
+        checks: z
+          .array(
+            z.object({
+              requirement: z.string().min(1).max(300),
+              met: z.boolean(),
+              evidence: z.string().max(500).default(""),
+            }),
+          )
+          .min(1)
+          .max(12),
+      }),
+      async ({ summary, checks }) => {
+        const unmet = unmetChecks(checks);
+        if (unmet.length) {
+          await ctx.event("step", "Not finished yet", unmet.join("; "));
+          return {
+            complete: false,
+            error: `Not finished: ${unmet.join("; ")}. Do the remaining work, or ask the person if it's blocked.`,
+          };
+        }
         const artifact = await service.artifact(
           owner,
           task,
           "report",
           task.title,
           summary,
-          { evidence: task.evidence },
+          { evidence: task.evidence, checks },
           "final",
         );
         task = await ctx.checkpoint({

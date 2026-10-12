@@ -228,7 +228,10 @@ test("enabled native chat and delegated tasks use Parallel and deduplicate sourc
   });
   calls.push({
     name: "finish_task",
-    arguments: { summary: "Research found" },
+    arguments: {
+      summary: "Research found",
+      checks: [{ requirement: "Requested work", met: true, evidence: "test result" }],
+    },
   });
   const task = await app.agent.createTask("local-user", {
     prompt: "Find useful public research",

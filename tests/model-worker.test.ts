@@ -74,7 +74,10 @@ for (const checkpoint of ["artifact", "cache"] as const) {
       requests.length = 0;
       calls.splice(0, calls.length, fill, {
         name: "finish_task",
-        arguments: { summary: "Saved the sample form." },
+        arguments: {
+          summary: "Saved the sample form.",
+          checks: [{ requirement: "Requested work", met: true, evidence: "test result" }],
+        },
       });
       await server.agent.answer(owner, task.id, "Retry");
       await server.agent.worker.tick();
@@ -118,7 +121,13 @@ test("CopilotKit model worker executes server tools and persists the confirmed o
         data: { steps: ["Take a walk", "Read for 30 minutes"] },
       },
     },
-    { name: "finish_task", arguments: { summary: "Saved your weekend plan with two steps." } },
+    {
+      name: "finish_task",
+      arguments: {
+        summary: "Saved your weekend plan with two steps.",
+        checks: [{ requirement: "Requested work", met: true, evidence: "test result" }],
+      },
+    },
   ];
   const { requests } = await modelFixture(t, (index) => calls[index]);
   const server = await createApp(
@@ -184,7 +193,10 @@ test("CopilotKit model worker executes server tools and persists the confirmed o
     requests.length = 0;
     calls.splice(0, calls.length, {
       name: "finish_task",
-      arguments: { summary: "The reviewed sample event is on the calendar." },
+      arguments: {
+        summary: "The reviewed sample event is on the calendar.",
+        checks: [{ requirement: "Requested work", met: true, evidence: "test result" }],
+      },
     });
     await server.agent.worker.tick();
     const finished = await server.agent.getTask("owner", appointment.id);
@@ -296,7 +308,13 @@ test("replaying a completed prepared action returns its receipt without reopenin
     requests.length = 0;
     calls = [
       { name: "prepare_event", arguments: draft },
-      { name: "finish_task", arguments: { summary: "The reviewed event is already complete." } },
+      {
+        name: "finish_task",
+        arguments: {
+          summary: "The reviewed event is already complete.",
+          checks: [{ requirement: "Requested work", met: true, evidence: "test result" }],
+        },
+      },
     ];
     await server.agent.worker.tick();
 
@@ -350,7 +368,13 @@ test("browser reads keep observation identity distinct while reusing one session
   const calls: { name: string; arguments: object }[] = [
     { name: "read_web", arguments: { url: "https://example.com/one" } },
     { name: "read_web", arguments: { url: "https://example.com/two" } },
-    { name: "finish_task", arguments: { summary: "Compared both public sources." } },
+    {
+      name: "finish_task",
+      arguments: {
+        summary: "Compared both public sources.",
+        checks: [{ requirement: "Requested work", met: true, evidence: "test result" }],
+      },
+    },
   ];
   await modelFixture(t, (index) => calls[index]);
   const app = await createApp(browser.db, {
