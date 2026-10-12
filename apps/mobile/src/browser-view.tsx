@@ -302,7 +302,15 @@ export function BrowserView({
                   busy={busy}
                   onPress={() => void act("close")}
                 />
-                <Pill label="Take control" icon={Hand} primary onPress={() => setControl(true)} />
+                <Pill
+                  label="Take control"
+                  icon={Hand}
+                  primary
+                  onPress={() => {
+                    setHint(false);
+                    setControl(true);
+                  }}
+                />
               </>
             ) : !loading ? (
               <Pill
