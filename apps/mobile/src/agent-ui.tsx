@@ -30,7 +30,6 @@ import { z } from "zod";
 import type { Artifact, BrowserSession } from "../../../packages/domain/src";
 import type {
   AgentArtifact,
-  AgentMemory,
   AgentTask,
   Evidence,
   Goal,
@@ -2060,11 +2059,10 @@ function AgentFileSheet({ kind, onClose }: { kind: "soul" | "memory"; onClose: (
             multiline
             value={text}
             onChangeText={setText}
+            style={{ minHeight: 360, lineHeight: 22 }}
           />
         ) : (
-          <Text selectable style={[s.text, { lineHeight: 22 }]}>
-            {file?.text ?? "Loading…"}
-          </Text>
+          <MarkdownText text={file?.text ?? "Loading…"} />
         )}
         {editing ? (
           <View style={[s.row, { gap: 8 }]}>
@@ -2095,5 +2093,66 @@ function AgentFileSheet({ kind, onClose }: { kind: "soul" | "memory"; onClose: (
         <ErrorNotice error={error} />
       </View>
     </Sheet>
+  );
+}
+
+function inlineMarkdown(line: string) {
+  return line.split(/(\*\*[^*]+\*\*|_[^_]+_)/).map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4)
+      return (
+        // biome-ignore lint/suspicious/noArrayIndexKey: parts of one static line
+        <Text key={index} style={{ fontWeight: "700" }}>
+          {part.slice(2, -2)}
+        </Text>
+      );
+    if (part.startsWith("_") && part.endsWith("_") && part.length > 2)
+      return (
+        // biome-ignore lint/suspicious/noArrayIndexKey: parts of one static line
+        <Text key={index} style={{ fontStyle: "italic" }}>
+          {part.slice(1, -1)}
+        </Text>
+      );
+    return part;
+  });
+}
+
+function MarkdownText({ text }: { text: string }) {
+  const lines = text.replace(/<!--[\s\S]*?-->/g, "").split("\n");
+  return (
+    <View style={{ gap: 6 }}>
+      {lines.map((line, index) => {
+        const key = `${index}:${line}`;
+        if (line.startsWith("# "))
+          return (
+            <Text key={key} style={{ fontSize: 22, fontWeight: "700", color: colors.text }}>
+              {line.slice(2)}
+            </Text>
+          );
+        if (line.startsWith("## "))
+          return (
+            <Text
+              key={key}
+              style={{ fontSize: 17, fontWeight: "700", color: colors.text, marginTop: 10 }}
+            >
+              {line.slice(3)}
+            </Text>
+          );
+        if (/^\s*[-*] /.test(line))
+          return (
+            <View key={key} style={[s.row, { gap: 8, alignItems: "flex-start" }]}>
+              <Text style={[s.text, { lineHeight: 22 }]}>•</Text>
+              <Text selectable style={[s.text, { flex: 1, lineHeight: 22 }]}>
+                {inlineMarkdown(line.replace(/^\s*[-*] /, ""))}
+              </Text>
+            </View>
+          );
+        if (!line.trim()) return <View key={key} style={{ height: 4 }} />;
+        return (
+          <Text key={key} selectable style={[s.text, { lineHeight: 22 }]}>
+            {inlineMarkdown(line)}
+          </Text>
+        );
+      })}
+    </View>
   );
 }
