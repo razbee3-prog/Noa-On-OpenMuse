@@ -11,7 +11,10 @@ import { modelFixture } from "./helpers/model.ts";
 for (const scenario of [
   {
     name: "finish_task",
-    arguments: { summary: "The requested work is complete." },
+    arguments: {
+      summary: "The requested work is complete.",
+      checks: [{ requirement: "Requested work", met: true, evidence: "test result" }],
+    },
     status: "succeeded",
   },
   {

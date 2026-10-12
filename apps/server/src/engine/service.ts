@@ -36,6 +36,7 @@ import { backgroundFailure } from "../log.ts";
 import { PlaidService } from "../plaid.ts";
 import { SearchService } from "../search.ts";
 import type { WorkspaceService } from "../workspace.ts";
+import { lateTasks } from "./completion.ts";
 import { analyzeSpending } from "./finance.ts";
 import { executeModelTask } from "./model.ts";
 import { appendDailyNote, pruneOldNotes } from "./notes.ts";
@@ -115,6 +116,7 @@ export class AgentService {
             );
           });
       await tidyDueMemories(this.db).catch((error) => backgroundFailure("tidy memory", error));
+      await this.auditLate().catch((error) => backgroundFailure("audit late work", error));
       await pruneOldNotes(this.db).catch((error) => backgroundFailure("prune notes", error));
       for (const { owner, value } of await this.db.scan<{ id: string; lastIdeasAt?: string }>(
         "agent-settings",
@@ -582,6 +584,25 @@ export class AgentService {
       if (queued) return saved;
     }
     throw new AppError("The watch changed while updating. Try again.", 409);
+  }
+  private lateSeen = new Map<string, string>();
+  /** After a restart or stall, confirm scheduled work actually resumed; flag what stays late. */
+  async auditLate(now = Date.now()) {
+    const seen = new Map<string, string>();
+    for (const { owner, value } of await this.db.scan<AgentTask>("tasks")) {
+      if (!lateTasks([value], now).length || !value.nextRunAt) continue;
+      seen.set(value.id, value.nextRunAt);
+      if (this.lateSeen.get(value.id) !== value.nextRunAt) continue;
+      backgroundFailure("late scheduled work", new Error(`${value.id} due ${value.nextRunAt}`));
+      await this.notify(
+        owner,
+        `Running late: ${value.title}`,
+        "This was due a while ago and hasn't run yet. Noa is retrying it.",
+        value.id,
+        `late:${value.id}:${value.nextRunAt}`,
+      );
+    }
+    this.lateSeen = seen;
   }
   async refreshIdeas(owner: string) {
     const w = await this.workspace.snapshot(owner);
