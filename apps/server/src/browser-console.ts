@@ -6,7 +6,7 @@ export function browserConsole(previewUrl: string) {
 <title>Noa's browser</title><style>
 *{box-sizing:border-box}html,body{height:100%}body{margin:0;background:#fcfcfc;color:#172125;font:14px -apple-system,BlinkMacSystemFont,system-ui,sans-serif;display:flex;flex-direction:column}
 header{padding:8px 14px;display:flex;align-items:center;justify-content:center;gap:8px;min-height:32px}#status{color:#697176;font-size:12px}#status.live{color:#248258}
-#stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#eef1f3;border-radius:18px;margin:0 8px}
+#stage{flex:1;min-height:0;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;background:#eef1f3;border-radius:18px;margin:0 8px}
 img{display:block;max-width:100%;max-height:100%;width:auto;height:auto;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}img.stale{opacity:.45}
 #error{margin:8px 12px 0;color:#984a41;background:#fbefed;padding:10px 12px;border-radius:14px}#error:empty{display:none}
 nav{display:flex;justify-content:center;gap:10px;padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
