@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 import type { AgentTask, RunEvent } from "../../../../packages/domain/src/agent.ts";
 import type { Store } from "../db.ts";
 import { backgroundFailure } from "../log.ts";
+import { isTransient } from "../retry.ts";
+
+const QUIET_RETRY_DELAYS_MS = [20_000, 60_000, 180_000];
 
 export class LostLeaseError extends Error {
   constructor() {
@@ -245,8 +248,38 @@ export class TaskWorker {
           { leaseId, status: "running" },
           { status: "queued", leaseId: null, leaseUntil: null },
         );
+      } else if (
+        isTransient(error) &&
+        !task.actionId &&
+        Number(task.state.quietRetries ?? 0) < QUIET_RETRY_DELAYS_MS.length
+      ) {
+        // A passing outage is retried quietly; the person only hears about it if every retry fails.
+        const retries = Number(task.state.quietRetries ?? 0);
+        await this.db.compareAndSwap(
+          owner,
+          "tasks",
+          taskId,
+          { leaseId, status: "running" },
+          {
+            status: "scheduled",
+            nextRunAt: new Date(this.now() + QUIET_RETRY_DELAYS_MS[retries]).toISOString(),
+            state: {
+              ...task.state,
+              quietRetries: retries + 1,
+              lastError: error instanceof Error ? error.message : String(error),
+            },
+            leaseId: null,
+            leaseUntil: null,
+            updatedAt: new Date(this.now()).toISOString(),
+          },
+        );
       } else {
-        const detail = error instanceof Error ? error.message : "Task execution failed";
+        // After the quiet retries, an outage is reported plainly, never as raw server text.
+        const detail = isTransient(error)
+          ? "Noa couldn't reach a service it needs after a few tries. Tap Retry to try again."
+          : error instanceof Error
+            ? error.message
+            : "Task execution failed";
         await event("error", "Task needs attention", detail).catch((error) =>
           backgroundFailure("record task error", error),
         );

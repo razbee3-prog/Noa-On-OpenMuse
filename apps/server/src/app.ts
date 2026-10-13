@@ -1,7 +1,6 @@
 import "./config.ts";
 import { randomUUID } from "node:crypto";
 import { MessageSchema } from "@ag-ui/core";
-import { CopilotKitIntelligence } from "@copilotkit/runtime/v2";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
@@ -35,6 +34,7 @@ import {
 import { AppError } from "./errors.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
+import { RetryingIntelligence } from "./intelligence.ts";
 import { PlaidService } from "./plaid.ts";
 import { rateLimit } from "./rate-limit.ts";
 import { WorkspaceService } from "./workspace.ts";
@@ -99,7 +99,7 @@ export async function createApp(
     plaid,
     connectors,
   );
-  const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
+  const intelligence = new RetryingIntelligence({ apiKey: config.intelligenceApiKey });
   const runtime = makeRuntime(config, agent, auth, accounts, intelligence);
   const app = new Hono<{ Variables: { owner: string; role: "admin" | "member" } }>();
   const origins = new Set([...config.allowedOrigins, new URL(config.publicUrl).origin]);

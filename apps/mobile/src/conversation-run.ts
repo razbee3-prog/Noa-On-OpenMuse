@@ -59,3 +59,9 @@ export async function runConversationTurn(
     subscription.unsubscribe();
   }
 }
+
+/** Quiet retries before a failed reply is shown, so a passing outage never reaches the person. */
+export const TURN_RETRY_DELAYS = [1000, 2500, 5000];
+export const turnFailedText = "Noa couldn't finish that reply. Tap Try again.";
+export const historyFailedText = "Couldn't load this chat. Your messages are safe.";
+export const saveFailedText = "Couldn't save this chat. Tap Try again.";

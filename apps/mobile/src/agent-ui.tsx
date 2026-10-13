@@ -50,6 +50,7 @@ import {
   Empty,
   ErrorNotice,
   Field,
+  friendlyError,
   LinkRow,
   Mascot,
   resultSummary,
@@ -109,6 +110,7 @@ export function TaskCard({
   const done = task.plan.filter((step) => step.status === "succeeded").length;
   const next = task.plan.find((step) => ["running", "waiting"].includes(step.status));
   const waiting = ["waiting_input", "waiting_approval"].includes(task.status);
+  const retrying = task.status === "scheduled" && Number(task.state?.quietRetries ?? 0) > 0;
   return (
     <Pressable
       accessibilityRole="button"
@@ -138,7 +140,7 @@ export function TaskCard({
           <View style={{ flex: 1, gap: 4 }}>
             <Text style={s.heading}>{task.title}</Text>
             <Text style={s.small}>
-              {statusLabel(task.status)}
+              {retrying ? "Working" : statusLabel(task.status)}
               {task.plan.length ? ` · ${done}/${task.plan.length} steps` : ""}
             </Text>
           </View>
@@ -158,7 +160,9 @@ export function TaskCard({
         )}
         {(task.question || task.result || task.error || next?.title) && (
           <Text numberOfLines={compact ? 2 : 4} style={s.muted}>
-            {task.question || task.error || resultSummary(task.result || next?.title || "")}
+            {task.question ||
+              (task.error && friendlyError(task.error)) ||
+              resultSummary(task.result || next?.title || "")}
           </Text>
         )}
         {waiting && (

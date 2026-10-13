@@ -48,10 +48,14 @@ import { ConnectToolCard } from "./connect-card";
 import { ConversationQueue, type QueuedMessage } from "./conversation-queue";
 import {
   ConversationTurnError,
+  historyFailedText,
   replayedRunError,
   runConversationTurn,
+  saveFailedText,
   showsRunError,
+  TURN_RETRY_DELAYS,
   threadLocked,
+  turnFailedText,
 } from "./conversation-run";
 import { DesktopToolCard } from "./desktop-tool-card";
 import { replyHaptic, tapHaptic } from "./haptics";
@@ -320,6 +324,9 @@ export function ChatScreen({
   const [saveError, setSaveError] = useState("");
   const [historyError, setHistoryError] = useState("");
   const [historyAttempt, setHistoryAttempt] = useState(0);
+  const historyRetries = useRef(0);
+  const inTurn = useRef(false);
+  const stopped = useRef(false);
   // Loads still replaying history. A count, so an old load finishing does not end a newer one.
   const replaying = useRef(0);
   // Set while a queued message is being sent, so a lock refusal holds it instead of failing.
@@ -387,13 +394,19 @@ export function ChatScreen({
           const { messages } = await api.request<{ messages: Message[] }>("/api/conversation");
           if (active) agent.setMessages(messages);
         }
-        if (active) setLoaded(true);
-      } catch (e) {
+        if (active) {
+          historyRetries.current = 0;
+          setLoaded(true);
+        }
+      } catch {
         if (active) {
           setLoaded(false);
-          setHistoryError(
-            `Could not load conversation. Your saved messages have not been changed. ${e instanceof Error ? e.message : String(e)}`,
-          );
+          const delay = TURN_RETRY_DELAYS[historyRetries.current];
+          if (delay === undefined) setHistoryError(historyFailedText);
+          else {
+            historyRetries.current += 1;
+            setTimeout(() => setHistoryAttempt((attempt) => attempt + 1), delay);
+          }
         }
       }
     }
@@ -418,12 +431,24 @@ export function ChatScreen({
       setBusy(true);
       setError("");
       if (message) agent.addMessage({ id: message.id, role: "user", content: message.text });
+      inTurn.current = true;
+      stopped.current = false;
       try {
-        await runConversationTurn(
-          agentId,
-          () => copilotkit.runAgent({ agent }),
-          (onError) => copilotkit.subscribe({ onError }),
-        );
+        for (let attempt = 0; ; attempt++) {
+          try {
+            await runConversationTurn(
+              agentId,
+              () => copilotkit.runAgent({ agent }),
+              (onError) => copilotkit.subscribe({ onError }),
+            );
+            break;
+          } catch (e) {
+            // A lock or a Stop isn't a failure; anything else is retried quietly first.
+            const locked = e instanceof ConversationTurnError && e.code === threadLocked;
+            if (locked || stopped.current || attempt >= TURN_RETRY_DELAYS.length) throw e;
+            await new Promise((resolve) => setTimeout(resolve, TURN_RETRY_DELAYS[attempt]));
+          }
+        }
         await Promise.all([refresh(), refreshAgent()]);
       } catch (e) {
         if (message && e instanceof ConversationTurnError && e.code === threadLocked) {
@@ -437,13 +462,12 @@ export function ChatScreen({
         throw e;
       } finally {
         queuedTurn.current = false;
+        inTurn.current = false;
         try {
           await saveHistory();
-        } catch (e) {
+        } catch {
           queue.pause();
-          setSaveError(
-            `Conversation could not be saved: ${e instanceof Error ? e.message : String(e)}`,
-          );
+          setSaveError(saveFailedText);
         } finally {
           runLock.current = false;
           setBusy(false);
@@ -525,6 +549,8 @@ export function ChatScreen({
     const subscription = copilotkit.subscribe({
       onError: (event) => {
         if (event.context?.agentId && event.context.agentId !== agentId) return;
+        // A turn in progress retries on its own and reports only its final failure.
+        if (inTurn.current) return;
         const during = { replaying: replaying.current > 0, queuedTurn: queuedTurn.current };
         if (!showsRunError(event, during)) return;
         const failure = event.error instanceof Error ? event.error : new Error(String(event.error));
@@ -534,6 +560,7 @@ export function ChatScreen({
     return () => subscription.unsubscribe();
   }, [copilotkit, agentId, queue]);
   async function stop() {
+    stopped.current = true;
     queue.pause();
     try {
       await copilotkit.stopAgent({ agent });
@@ -622,8 +649,13 @@ export function ChatScreen({
         {!!historyError && (
           <>
             <ErrorNotice error={historyError} />
-            <Button onPress={() => setHistoryAttempt((attempt) => attempt + 1)}>
-              Retry loading conversation
+            <Button
+              onPress={() => {
+                historyRetries.current = 0;
+                setHistoryAttempt((attempt) => attempt + 1);
+              }}
+            >
+              Try again
             </Button>
           </>
         )}
@@ -839,7 +871,7 @@ export function ChatScreen({
         )}
         {(!richThreads || selection.id === mainId) && <BackgroundUpdates />}
         {(replying || !!reveal) && <TypingDots />}
-        <ErrorNotice error={error} />
+        <ErrorNotice error={error && turnFailedText} />
         {!!error && (
           <Button
             style={{ alignSelf: "flex-start" }}
@@ -853,7 +885,7 @@ export function ChatScreen({
                 .catch((e) => setError(e instanceof Error ? e.message : String(e)));
             }}
           >
-            Retry response
+            Try again
           </Button>
         )}
       </ScrollView>
@@ -915,7 +947,7 @@ export function ChatScreen({
             small
             disabled={busy}
             onPress={() => {
-              void saveHistory().catch((e) => setSaveError(String(e)));
+              void saveHistory().catch(() => setSaveError(saveFailedText));
             }}
           >
             Retry saving conversation

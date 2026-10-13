@@ -350,10 +350,18 @@ export function Empty({
     </View>
   );
 }
+const TECHNICAL =
+  /<html|<!doctype|\b(error|status) \d{3}\b|ECONN|ETIMEDOUT|TypeError|Failed to fetch|Network request failed|Unexpected token|\bat [\w.]+ \(/i;
+/** Plain wording for an error; raw server text, HTML and stack traces never reach the screen. */
+export function friendlyError(error: string) {
+  return TECHNICAL.test(error) || error.length > 240
+    ? "Something went wrong. Please try again."
+    : error;
+}
 export function ErrorNotice({ error }: { error?: string }) {
   return error ? (
     <View accessibilityRole="alert" style={s.error}>
-      <Text style={[s.text, { color: colors.danger }]}>{error}</Text>
+      <Text style={[s.text, { color: colors.danger }]}>{friendlyError(error)}</Text>
     </View>
   ) : null;
 }
