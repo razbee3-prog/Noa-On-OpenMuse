@@ -49,6 +49,7 @@ import {
   pageLines,
   withoutRelativeTimes,
 } from "./page-diff.ts";
+import { recordFinishedJob, reviewDuePlaybooks } from "./playbooks.ts";
 import { loadMemory, loadSoul, tidyDueMemories } from "./soul-memory.ts";
 import { generateText } from "./tanstack-agent.ts";
 import { LostLeaseError, type TaskContext, TaskWorker } from "./worker.ts";
@@ -129,6 +130,10 @@ export class AgentService {
         await consolidateDueMemories(this.db, (system, user) =>
           generateText(reviewModel, system, user),
         ).catch((error) => backgroundFailure("consolidate memory", error));
+      if (reviewModel)
+        await reviewDuePlaybooks(this.db, (system, user) =>
+          generateText(reviewModel, system, user),
+        ).catch((error) => backgroundFailure("review playbooks", error));
       await pruneOldNotes(this.db).catch((error) => backgroundFailure("prune notes", error));
       for (const { owner, value } of await this.db.scan<{ id: string; lastIdeasAt?: string }>(
         "agent-settings",
@@ -1051,6 +1056,9 @@ export class AgentService {
     const task = await this.getTask(owner, saved.id);
     if (task.status === "succeeded") {
       await appendDailyNote(this.db, owner, `Finished: ${task.title}`).catch(() => {});
+      await recordFinishedJob(this.db, owner, task).catch((error) =>
+        backgroundFailure("record finished job", error),
+      );
       await this.notify(
         owner,
         task.title,
