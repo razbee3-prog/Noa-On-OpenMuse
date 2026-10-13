@@ -51,6 +51,7 @@ import {
 } from "./page-diff.ts";
 import { loadMemory, loadSoul, tidyDueMemories } from "./soul-memory.ts";
 import { generateText } from "./tanstack-agent.ts";
+import { claimDueTracked, listTracked } from "./tracked.ts";
 import { LostLeaseError, type TaskContext, TaskWorker } from "./worker.ts";
 
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -130,6 +131,18 @@ export class AgentService {
           generateText(reviewModel, system, user),
         ).catch((error) => backgroundFailure("consolidate memory", error));
       await pruneOldNotes(this.db).catch((error) => backgroundFailure("prune notes", error));
+      await claimDueTracked(this.db)
+        .then(async (due) => {
+          for (const { owner, item, text } of due)
+            await this.notify(
+              owner,
+              item.title,
+              text,
+              undefined,
+              `tracked-due:${item.id}:${item.dueAt}`,
+            );
+        })
+        .catch((error) => backgroundFailure("tracked items", error));
       for (const { owner, value } of await this.db.scan<{ id: string; lastIdeasAt?: string }>(
         "agent-settings",
       )) {
@@ -162,6 +175,7 @@ export class AgentService {
       tasks,
       goals,
       monitors,
+      tracked,
       ideas,
       memories,
       artifacts,
@@ -173,6 +187,7 @@ export class AgentService {
       this.db.list<AgentTask>(owner, "tasks"),
       this.db.list<Goal>(owner, "goals"),
       this.db.list<Monitor>(owner, "monitors"),
+      listTracked(this.db, owner),
       this.db.list<Idea>(owner, "ideas"),
       this.db.list<AgentMemory>(owner, "memories"),
       this.db.list<AgentArtifact>(owner, "agent-artifacts"),
@@ -186,6 +201,7 @@ export class AgentService {
       tasks,
       goals,
       monitors,
+      tracked,
       ideas,
       memories,
       soul,
