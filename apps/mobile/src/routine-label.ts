@@ -1,4 +1,4 @@
-import type { AgentTask } from "../../../packages/domain/src/agent";
+import type { AgentTask, TrackedItem } from "../../../packages/domain/src/agent";
 
 /** A failed attempt being retried quietly still reads as work in progress. */
 export function isRetrying(task: AgentTask) {
@@ -51,4 +51,20 @@ export function nextRunLabel(task: AgentTask, now = Date.now()) {
             ? ` · every ${minutes} min`
             : "";
   return `Next: ${when(at, now)}${every}`;
+}
+
+const TRACKED_KIND: Record<TrackedItem["kind"], string> = {
+  delivery: "Delivery",
+  reservation: "Reservation",
+  refund: "Refund",
+  bill: "Bill",
+  other: "Tracking",
+};
+
+export function trackedSubtitle(item: TrackedItem, now = Date.now()) {
+  if (item.status === "done") return `${TRACKED_KIND[item.kind]} · Done`;
+  const due = item.dueAt ? Date.parse(item.dueAt) : Number.NaN;
+  const latest = item.timeline[item.timeline.length - 1]?.text;
+  const when_ = Number.isFinite(due) ? (due < now ? "Overdue" : `Due ${when(due, now)}`) : "";
+  return [TRACKED_KIND[item.kind], when_, latest].filter(Boolean).join(" · ");
 }

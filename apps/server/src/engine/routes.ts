@@ -10,6 +10,7 @@ import { createTaskSchema } from "../../../../packages/domain/src/agent.ts";
 import { AppError } from "../errors.ts";
 import type { AgentService } from "./service.ts";
 import { loadMemory, loadSoul, MEMORY_ID, SOUL_ID, saveFile } from "./soul-memory.ts";
+import { closeTracked } from "./tracked.ts";
 
 const text = z.string().trim().min(1).max(4000);
 const memorySchema = z.object({ text, source: z.string().trim().min(1).max(200).optional() });
@@ -85,6 +86,9 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
       .parse(await c.req.json());
     return c.json(await service.controlMonitor(c.get("owner"), c.req.param("id"), action));
   });
+  app.post("/tracked/:id/close", async (c) =>
+    c.json(await closeTracked(service.db, c.get("owner"), c.req.param("id"))),
+  );
   app.post("/ideas/refresh", async (c) => c.json(await service.refreshIdeas(c.get("owner"))));
   app.post("/ideas/:id", async (c) => {
     const body = z

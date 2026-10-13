@@ -80,6 +80,17 @@ export interface Monitor {
   error?: string;
   checks: number;
 }
+export interface TrackedItem {
+  id: string;
+  kind: "delivery" | "reservation" | "refund" | "bill" | "other";
+  title: string;
+  status: "open" | "done";
+  dueAt?: string;
+  timeline: { at: string; text: string }[];
+  createdAt: string;
+  updatedAt: string;
+  dueNotifiedAt?: string;
+}
 export interface Idea {
   id: string;
   title: string;
@@ -133,6 +144,7 @@ export interface AgentWorkspace {
   tasks: AgentTask[];
   goals: Goal[];
   monitors: Monitor[];
+  tracked?: TrackedItem[];
   ideas: Idea[];
   memories: AgentMemory[];
   artifacts: AgentArtifact[];

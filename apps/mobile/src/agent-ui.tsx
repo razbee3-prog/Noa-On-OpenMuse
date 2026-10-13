@@ -3,6 +3,8 @@ import {
   Bell,
   BriefcaseBusiness,
   CalendarDays,
+  CheckCheck,
+  ChevronDown,
   ChevronRight,
   CircleDollarSign,
   FileText,
@@ -38,7 +40,7 @@ import type {
   RunEvent,
 } from "../../../packages/domain/src/agent";
 import { useAgentWorkspace } from "./agent-workspace";
-import { isRetrying, nextRunLabel } from "./routine-label";
+import { isRetrying, nextRunLabel, trackedSubtitle } from "./routine-label";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
 import { SignInPanel } from "./sign-in-card";
 import {
@@ -54,6 +56,7 @@ import {
   friendlyError,
   LinkRow,
   Mascot,
+  relativeDate,
   resultSummary,
   SectionHeading,
   Sheet,
@@ -1271,7 +1274,15 @@ function IdeaCard({ idea }: { idea: Idea }) {
   );
 }
 export function GoalsScreen() {
-  const { data } = useAgentWorkspace();
+  const { data, mutate } = useAgentWorkspace();
+  const [openTracked, setOpenTracked] = useState<string>();
+  const tracked = (data?.tracked || [])
+    .filter(
+      (item) => item.status === "open" || Date.now() - Date.parse(item.updatedAt) < 7 * 86400000,
+    )
+    .sort((a, b) =>
+      a.status === b.status ? b.updatedAt.localeCompare(a.updatedAt) : a.status === "open" ? -1 : 1,
+    );
   const [adding, setAdding] = useState<string>();
   const [selectedGoal, setSelectedGoal] = useState<string>();
   const [selectedMonitor, setSelectedMonitor] = useState<string>();
@@ -1301,6 +1312,53 @@ export function GoalsScreen() {
             Track
           </Button>
         </View>
+        {tracked.map((item) => (
+          <View key={item.id}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${openTracked === item.id ? "Hide" : "Show"} updates: ${item.title}`}
+              onPress={() => setOpenTracked(openTracked === item.id ? undefined : item.id)}
+              style={[s.row, { gap: 12, paddingVertical: 13 }]}
+            >
+              {item.status === "done" ? (
+                <CheckCheck size={21} color={colors.muted} />
+              ) : (
+                <Square size={21} color={colors.muted} />
+              )}
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={[s.text, item.status === "done" && { color: colors.muted }]}>
+                  {item.title}
+                </Text>
+                <Text numberOfLines={1} style={s.muted}>
+                  {trackedSubtitle(item)}
+                </Text>
+              </View>
+              {openTracked === item.id ? (
+                <ChevronDown size={18} color={colors.muted} />
+              ) : (
+                <ChevronRight size={18} color={colors.muted} />
+              )}
+            </Pressable>
+            {openTracked === item.id && (
+              <View style={{ gap: 8, paddingLeft: 33, paddingBottom: 12 }}>
+                {[...item.timeline].reverse().map((entry) => (
+                  <Text key={`${entry.at}${entry.text}`} style={s.small}>
+                    {relativeDate(entry.at)} · {entry.text}
+                  </Text>
+                ))}
+                {item.status === "open" && (
+                  <Button
+                    small
+                    icon={CheckCheck}
+                    onPress={() => mutate(`/tracked/${encodeURIComponent(item.id)}/close`, {})}
+                  >
+                    Mark done
+                  </Button>
+                )}
+              </View>
+            )}
+          </View>
+        ))}
         {(showAll ? monitors : monitors.slice(0, 3)).map((item) => (
           <Pressable
             key={item.id}
@@ -1321,7 +1379,7 @@ export function GoalsScreen() {
             <ChevronRight size={18} color={colors.muted} />
           </Pressable>
         ))}
-        {!monitors.length && (
+        {!monitors.length && !tracked.length && (
           <Text style={[s.muted, { paddingVertical: 10 }]}>
             A savings rate, a bill, a price you’re watching.
           </Text>
