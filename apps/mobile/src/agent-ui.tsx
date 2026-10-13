@@ -38,6 +38,7 @@ import type {
   RunEvent,
 } from "../../../packages/domain/src/agent";
 import { useAgentWorkspace } from "./agent-workspace";
+import { isRetrying, nextRunLabel } from "./routine-label";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
 import { SignInPanel } from "./sign-in-card";
 import {
@@ -110,7 +111,8 @@ export function TaskCard({
   const done = task.plan.filter((step) => step.status === "succeeded").length;
   const next = task.plan.find((step) => ["running", "waiting"].includes(step.status));
   const waiting = ["waiting_input", "waiting_approval"].includes(task.status);
-  const retrying = task.status === "scheduled" && Number(task.state?.quietRetries ?? 0) > 0;
+  const retrying = isRetrying(task);
+  const nextRun = nextRunLabel(task);
   return (
     <Pressable
       accessibilityRole="button"
@@ -143,6 +145,7 @@ export function TaskCard({
               {retrying ? "Working" : statusLabel(task.status)}
               {task.plan.length ? ` · ${done}/${task.plan.length} steps` : ""}
             </Text>
+            {!!nextRun && <Text style={s.small}>{nextRun}</Text>}
           </View>
           <ChevronRight size={17} color={colors.muted} />
         </View>

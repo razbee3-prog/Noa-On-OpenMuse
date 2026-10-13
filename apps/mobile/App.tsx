@@ -45,6 +45,7 @@ import { ChromeContext } from "./src/chrome";
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
 import { tapHaptic } from "./src/haptics";
+import { routineStatus } from "./src/routine-label";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
 import { onSignedOut } from "./src/session-events";
 import { clearSession, loadSession, saveSession } from "./src/session-store";
@@ -351,26 +352,14 @@ function WorkspaceShell({
   const pending =
     (data?.notifications.filter((n) => !n.read).length || 0) +
     workspace.actions.filter((a) => a.status === "awaiting_review").length;
-  const activeTask =
-    data?.tasks.find(
-      (task) => task.status === "waiting_approval" || task.status === "waiting_input",
-    ) || data?.tasks.find((task) => task.status === "running");
   const savedName = data?.identity.name;
   const agentName = !savedName || savedName === "Noa on OpenMuse" ? "Noa" : savedName;
   const specialist = useSpecialist(
     richThreads && !threadsLoading && selection.id !== mainId ? selection.id : undefined,
   );
-  const status = activeTask
-    ? activeTask.status === "waiting_approval"
-      ? `Ready to review · ${activeTask.title}`
-      : activeTask.status === "waiting_input"
-        ? `Needs your input · ${activeTask.title}`
-        : activeTask.plan.find((step) => step.status === "running")?.title || activeTask.title
-    : data?.tasks.some((task) => task.status === "queued")
-      ? "Picking up your next task…"
-      : richThreads && !threadsLoading && selection.id !== mainId
-        ? "Side chat"
-        : "";
+  const status =
+    routineStatus(data?.tasks ?? []) ||
+    (richThreads && !threadsLoading && selection.id !== mainId ? "Side chat" : "");
   const title = titles[section] || titles.apps;
   const Screen =
     section === "mail"
