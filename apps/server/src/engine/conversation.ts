@@ -573,6 +573,7 @@ export class ConversationAgent extends AbstractAgent {
     ];
     const agent = tanstackAgent({
       model: this.config.model ?? "openai/unconfigured",
+      trace: { name: "chat-reply", userId: this.owner },
       // Desktop work takes one step per click or key, each checked on a screenshot.
       maxSteps: this.config.computerProvider === "e2b-desktop" || browserConfigured ? 16 : 6,
       stepLimitNote:

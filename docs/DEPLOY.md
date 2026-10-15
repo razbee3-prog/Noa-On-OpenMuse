@@ -21,7 +21,7 @@ Per-user computer containers are created by the API through the socket proxy, wi
 
 ## `/opt/noa/.env` keys
 
-`SITE_ADDRESS`, `MODEL`, `ANTHROPIC_API_KEY`, `CPK_INTELLIGENCE_API_KEY`, `CPK_TELEMETRY_ID`, `OPENMUSE_ACCESS_KEY`, `TOKEN_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`, `WORKER_TOKEN`, `COMPUTER_DEPLOYMENT_ID`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` (`sandbox` or `production`).
+`SITE_ADDRESS`, `MODEL`, `ANTHROPIC_API_KEY`, `CPK_INTELLIGENCE_API_KEY`, `CPK_TELEMETRY_ID`, `OPENMUSE_ACCESS_KEY`, `TOKEN_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`, `WORKER_TOKEN`, `COMPUTER_DEPLOYMENT_ID`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` (`sandbox` or `production`), and optionally `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`.
 
 The same values are stored as GitHub repository secrets, as a backup.
 
@@ -37,6 +37,10 @@ The same values are stored as GitHub repository secrets, as a backup.
 - Each account links its own bank under Apps > Bank (Plaid), using Plaid Hosted Link. The access token is encrypted with `TOKEN_ENCRYPTION_KEY` and stored per owner.
 - Only Balances and Transactions are used. The client in `packages/integrations/src/plaid.ts` has no transfer or payment endpoints.
 - The droplet runs `PLAID_ENV=sandbox`. To go live, set `PLAID_SECRET` to the production secret and `PLAID_ENV=production` in `/opt/noa/.env`, then run `infra/deploy.sh`.
+
+## Langfuse tracing
+
+With both Langfuse keys in `/opt/noa/.env`, the API sends one trace per model run to Langfuse (`apps/server/src/langfuse.ts`): `chat-reply` for chat turns (session = chat thread), `run-task` for delegated tasks (session = task ID, tagged with the task kind), and `review-lessons`, `consolidate-memory`, `review-playbooks` for background reviews. Each trace has a generation per model call and a tool observation per tool call, with the owner ID as the user. Without the keys nothing is sent.
 
 ## Deploys
 
