@@ -125,15 +125,15 @@ export class AgentService {
       const reviewModel = this.config.modelFast ?? this.config.model;
       if (reviewModel)
         await reviewDueLessons(this.db, (system, user) =>
-          generateText(reviewModel, system, user),
+          generateText(reviewModel, system, user, { name: "review-lessons" }),
         ).catch((error) => backgroundFailure("review lessons", error));
       if (reviewModel)
         await consolidateDueMemories(this.db, (system, user) =>
-          generateText(reviewModel, system, user),
+          generateText(reviewModel, system, user, { name: "consolidate-memory" }),
         ).catch((error) => backgroundFailure("consolidate memory", error));
       if (reviewModel)
         await reviewDuePlaybooks(this.db, (system, user) =>
-          generateText(reviewModel, system, user),
+          generateText(reviewModel, system, user, { name: "review-playbooks" }),
         ).catch((error) => backgroundFailure("review playbooks", error));
       await pruneOldNotes(this.db).catch((error) => backgroundFailure("prune notes", error));
       await claimDueTracked(this.db)

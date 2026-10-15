@@ -461,6 +461,7 @@ export async function executeModelTask(
   const runOnce = async (model: string) => {
     const agent = tanstackAgent({
       model,
+      trace: { name: "run-task", userId: owner, tags: [task.kind] },
       maxSteps: browserConfigured ? 30 : 16,
       tools,
       shouldContinue: () => outcome === undefined,

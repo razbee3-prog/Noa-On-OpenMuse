@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { createApp } from "./app.ts";
 import { readConfig } from "./config.ts";
 import { createStore } from "./db.ts";
+import { shutdownLangfuse } from "./langfuse.ts";
 
 const config = readConfig();
 const db = await createStore({
@@ -18,6 +19,7 @@ const shutdown = () => {
   server.close(() => {
     void agent
       .stop()
+      .then(() => shutdownLangfuse())
       .then(() => db.close())
       .then(() => process.exit(0));
   });

@@ -19,6 +19,7 @@ import { type OpenAIChatModel, openaiChatCompletions, openaiText } from "@tansta
 import { map, mergeMap, type Observable } from "rxjs";
 import { z } from "zod";
 import { MODEL_MAX_RETRIES } from "../config.ts";
+import { langfuseMiddleware, type TraceInfo } from "../langfuse.ts";
 
 // Same "provider/model" strings, env vars and base URL formats as the AI SDK resolver in
 // @copilotkit/runtime. Each provider SDK retries transient failures up to MODEL_MAX_RETRIES times.
@@ -120,6 +121,8 @@ export function tanstackAgent(options: {
   shouldContinue?: () => boolean;
   /** Said when the step limit, not the model, ends a run; otherwise the reply just stops. */
   stepLimitNote?: string;
+  /** Langfuse trace name and owner; the AG-UI thread becomes the session. */
+  trace?: Omit<TraceInfo, "sessionId">;
 }) {
   const agent = new BuiltInAgent({
     type: "tanstack",
@@ -154,6 +157,11 @@ export function tanstackAgent(options: {
         agentLoopStrategy: (state) =>
           maxIterations(options.maxSteps)(state) && (options.shouldContinue?.() ?? true),
         abortController,
+        middleware: langfuseMiddleware({
+          name: "agent-run",
+          ...options.trace,
+          sessionId: input.threadId,
+        }),
       });
     },
   });
@@ -242,11 +250,12 @@ function splitTextAtToolCalls(events: Observable<BaseEvent>) {
 }
 
 /** One-shot text completion for background jobs (no tools). */
-export async function generateText(model: string, system: string, user: string) {
+export async function generateText(model: string, system: string, user: string, trace: TraceInfo) {
   return chat({
     adapter: adapter(model),
     messages: [{ role: "user", content: user }],
     systemPrompts: [system],
     stream: false,
+    middleware: langfuseMiddleware(trace),
   });
 }
